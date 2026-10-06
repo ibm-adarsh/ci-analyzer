@@ -1810,6 +1810,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
       <span class="hctx-kbd">j/k</span> nav
       <span style="opacity:.3;margin:0 2px">·</span>
       <span class="hctx-kbd">/</span> search
+      <span style="opacity:.3;margin:0 2px">·</span>
+      <span class="hctx-kbd">1-6</span> tabs
     </span>
   </div>
 </header>
@@ -1932,7 +1934,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 
   <div class="tab-content" id="tab-steps">
     <div class="section-card">
-      <h2>All Steps by Phase — Logs &amp; Diagnostics</h2>
+      <h2>All Steps by Phase — Logs &amp; Diagnostics
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10.5px" onclick="expandAllFailed()" title="Open all failed step detail panels">Expand Failed</button>
+      </h2>
       <div id="stepsDetail"></div>
     </div>
     <div id="junitPanel"></div>
@@ -2967,6 +2971,11 @@ async function analyzeJob() {
     hideLoading();
     document.getElementById('results').style.display = 'block';
     document.getElementById('copyBtn').style.display = 'inline-flex';
+    // Push job URL to hash for bookmarking/sharing
+    try {
+      const encoded = encodeURIComponent(raw);
+      history.replaceState(null, '', '#job=' + encoded);
+    } catch {}
 
   } catch (e) {
     hideLoading();
@@ -3081,13 +3090,15 @@ async function fetchAllSteps(artBase, bucket, gcsPath, testSubdir, started) {
     // Advance cursor only if we have a valid timestamp
     if (endTs) prevEndTs = endTs;
 
-    const logTail = (logText && logText !== '__REDACTED__')
-      ? logText.split('\n').slice(-80).join('\n')
+    const safeLog = (logText && logText !== '__REDACTED__') ? logText : '';
+    const logTail = safeLog
+      ? safeLog.split('\n').slice(-80).join('\n')
       : (logText === '__REDACTED__' ? '__REDACTED__' : null);
-    const patterns = detectPatterns(logText && logText !== '__REDACTED__' ? logText : '');
-    const failureSnippet = extractSnippet(logText && logText !== '__REDACTED__' ? logText : '', patterns);
+    const patterns = detectPatterns(safeLog);
+    const failureSnippet = extractSnippet(safeLog, patterns);
 
-    results[stepName] = { status, duration, finJson, logTail, patterns, failureSnippet, stepBase };
+    // Store full log text for env parsing; logTail (last 80 lines) for display only
+    results[stepName] = { status, duration, finJson, logTail, logText: safeLog || null, patterns, failureSnippet, stepBase };
   }
 
   return results;
@@ -3180,7 +3191,8 @@ function parseJobMeta(jobName) {
   m.topology   = /z-za/.test(jobName) ? 'IBM Z heterogeneous (z-za)'
                : /z-z/.test(jobName)  ? 'IBM Z homogeneous (z-z)'
                : /p-p/.test(jobName)  ? 'ppc64le homogeneous (p-p)' : 'unknown';
-  m.arch = 's390x'; m.profile = 'libvirt-s390x-vpn';
+  m.arch = /p-p/.test(jobName) ? 'ppc64le' : 's390x';
+  m.profile = /ppc64le|p-p/.test(jobName) ? 'libvirt-ppc64le-vpn' : 'libvirt-s390x-vpn';
   m.workflow = 'openshift-e2e-libvirt-vpn';
   return m;
 }
@@ -3576,16 +3588,20 @@ function renderLogViewer(ref, stepData, safeId) {
       </div>`;
   }
   const rawLogId = 'rawlog_' + safeId;
+  const totalLines = (stepData.logText || log).split('\n').length;
+  const showing = log.split('\n').length;
+  const isTruncated = artUrl && totalLines > showing;
   return `
     <div class="log-viewer">
       <div class="log-header">
-        <span class="log-label">build-log.txt — last 80 lines</span>
+        <span class="log-label">build-log.txt — last ${showing} lines${isTruncated ? ` of ~${totalLines}` : ''}</span>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <div class="log-search-wrap">
             <input class="log-search" type="text" placeholder="Search log…" id="lsq_${safeId}"
               oninput="searchLog('${safeId}')" onkeydown="searchLogNav(event,'${safeId}')">
             <span class="log-match-count" id="lsm_${safeId}"></span>
           </div>
+          ${isTruncated ? `<button class="log-copy-btn" onclick="loadFullLog('${safeId}','${artUrl}')">Load full log</button>` : ''}
           ${artUrl ? `<a href="${artUrl}" target="_blank" style="font-size:11px;color:var(--accent)">full ↗</a>` : ''}
           ${viewUrl ? `<a href="${viewUrl}" target="_blank" style="font-size:11px;color:var(--muted)">browse ↗</a>` : ''}
           <button class="log-copy-btn" onclick="copyLogFromEl('${rawLogId}')">Copy</button>
@@ -3594,6 +3610,33 @@ function renderLogViewer(ref, stepData, safeId) {
       <div class="log-pre" id="log_${safeId}" data-raw="${encodeURIComponent(log)}">${colorizeLog(esc(log))}</div>
       <div id="${rawLogId}" style="display:none">${esc(log)}</div>
     </div>`;
+}
+
+/** Fetch and replace with the complete log for a step */
+async function loadFullLog(safeId, artUrl) {
+  const pre = document.getElementById('log_' + safeId);
+  const raw = document.getElementById('rawlog_' + safeId);
+  if (!pre) return;
+  pre.innerHTML = '<span style="color:var(--muted)">Loading full log…</span>';
+  try {
+    const text = await fts(artUrl);
+    if (!text || text === '__REDACTED__') {
+      pre.innerHTML = '<span style="color:var(--red)">Could not load full log.</span>';
+      return;
+    }
+    pre.dataset.raw = encodeURIComponent(text);
+    pre.innerHTML = colorizeLog(esc(text));
+    if (raw) raw.textContent = text;
+    // Update header label
+    const header = pre.closest('.log-viewer')?.querySelector('.log-label');
+    if (header) header.textContent = `build-log.txt — ${text.split('\n').length} lines (full)`;
+    // Remove "Load full log" button
+    pre.closest('.log-viewer')?.querySelectorAll('.log-copy-btn').forEach(btn => {
+      if (btn.textContent.includes('Load full log')) btn.remove();
+    });
+  } catch {
+    pre.innerHTML = '<span style="color:var(--red)">Error loading full log.</span>';
+  }
 }
 
 // ── Log search ──────────────────────────────────────────────────
@@ -3615,7 +3658,7 @@ function searchLog(safeId) {
     return;
   }
 
-  // Find all match positions in raw log
+  // Find all match positions in raw log (search on plain text, not escaped HTML)
   const lines = rawLog.split('\n');
   const matchLines = [];
   const qLower = query.toLowerCase();
@@ -3626,14 +3669,18 @@ function searchLog(safeId) {
   _logSearchState[safeId] = { matches: matchLines, current: 0 };
   if (countEl) countEl.textContent = matchLines.length ? `${matchLines.length} match${matchLines.length>1?'es':''}` : 'no match';
 
-  // Re-render with highlights
+  // Re-render with highlights: escape the line first, then highlight escaped query
+  const safeQueryRe = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi');
   const escaped = lines.map((line, i) => {
-    const isMatch = matchLines.includes(i);
-    const isCurrent = matchLines[0] === i;
     const escapedLine = esc(line);
+    const isMatch = matchLines.includes(i);
     if (!isMatch) return colorizeLog(escapedLine);
+    const isCurrent = matchLines[0] === i;
+    // Replace the escaped version of the query inside already-escaped line HTML
+    const escapedQuery = esc(query);
+    const escapedQueryRe = new RegExp(escapedQuery.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi');
     const highlighted = escapedLine.replace(
-      new RegExp(esc(query).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi'),
+      escapedQueryRe,
       m => `<mark${isCurrent?' class="current"':''}>${m}</mark>`
     );
     return colorizeLog(highlighted);
@@ -3656,17 +3703,19 @@ function searchLogNav(e, safeId) {
     const pre = document.getElementById('log_' + safeId);
     const rawLog = decodeURIComponent(pre?.dataset.raw || '');
     const lines = rawLog.split('\n');
-    const qLower = document.getElementById('lsq_' + safeId)?.value.toLowerCase() || '';
+    const query = document.getElementById('lsq_' + safeId)?.value || '';
     const countEl = document.getElementById('lsm_' + safeId);
     if (countEl) countEl.textContent = `${state.current+1}/${state.matches.length}`;
-    // Re-render with new current
+    // Re-render with new current — same safe pattern as searchLog
     if (pre) {
+      const escapedQuery = esc(query);
+      const escapedQueryRe = new RegExp(escapedQuery.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi');
       const escaped = lines.map((line, i) => {
-        if (!state.matches.includes(i)) return colorizeLog(esc(line));
-        const isCurrent = state.matches[state.current] === i;
         const escapedLine = esc(line);
+        if (!state.matches.includes(i)) return colorizeLog(escapedLine);
+        const isCurrent = state.matches[state.current] === i;
         const highlighted = escapedLine.replace(
-          new RegExp(esc(qLower).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi'),
+          escapedQueryRe,
           m => `<mark${isCurrent?' class="current"':''}>${m}</mark>`
         );
         return colorizeLog(highlighted);
@@ -4755,7 +4804,7 @@ function renderRecent() {
     const el    = document.getElementById('recentList');
     panel.style.display = 'block';
     el.innerHTML = list.map(item => `
-      <div class="recent-item" onclick="loadRecent('${esc(item.url)}')">
+      <div class="recent-item" onclick="loadRecent(decodeURIComponent('${encodeURIComponent(item.url)}'))">
         <span class="rbadge ${item.result||'RUNNING'}">${item.result||'?'}</span>
         <span class="recent-name" title="${esc(item.name)}">${esc(item.name)}</span>
         <span class="recent-ts">${timeAgo(item.ts)}</span>
@@ -4916,7 +4965,33 @@ function showTab(id) {
   const ids = ['overview','steps','timeline','env','debug','prowlog'];
   document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ids[i]===id));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id==='tab-'+id));
+  // Persist active tab in URL hash for shareability
+  try { history.replaceState(null, '', '#tab=' + id); } catch {}
 }
+/** Expand detail panels for all failed steps currently visible in the Steps tab */
+function expandAllFailed() {
+  const stepsTab = document.getElementById('tab-steps');
+  if (!stepsTab) return;
+  // First expand all phase groups that contain failed steps
+  stepsTab.querySelectorAll('.steps-phase-body').forEach(body => {
+    if ([...body.querySelectorAll('.step-row.failed')].length > 0) {
+      body.style.display = '';
+      const expId = body.id.replace('spg_', 'spe_');
+      const exp = document.getElementById(expId);
+      if (exp) exp.classList.add('open');
+    }
+  });
+  // Then expand detail panels of each failed row
+  stepsTab.querySelectorAll('.step-row.failed').forEach(row => {
+    const detail = row.querySelector('.step-detail');
+    const arrow  = row.querySelector('.expand-arrow');
+    if (detail && !detail.classList.contains('open')) {
+      detail.classList.add('open');
+      if (arrow) arrow.classList.add('open');
+    }
+  });
+}
+
 function togglePhase(bodyId, expId) {
   const el = document.getElementById(bodyId), ex = document.getElementById(expId);
   if (!el) return;
@@ -5021,8 +5096,13 @@ document.addEventListener('keydown', e => {
     _focusedStepIdx = -1;
     getVisibleStepRows().forEach(r => r.classList.remove('kb-focused'));
   }
-  // j/k only when not typing in an input
   if (!inInput) {
+    // Tab shortcuts: 1-6 switch tabs
+    const TAB_KEYS = { '1':'overview','2':'steps','3':'timeline','4':'env','5':'debug','6':'prowlog' };
+    if (TAB_KEYS[e.key] && document.getElementById('results')?.style.display !== 'none') {
+      e.preventDefault();
+      showTab(TAB_KEYS[e.key]);
+    }
     if (e.key === 'j') { e.preventDefault(); navSteps(+1); }
     if (e.key === 'k') { e.preventDefault(); navSteps(-1); }
     if (e.key === 'Enter' && _focusedStepIdx >= 0) {
@@ -5059,6 +5139,18 @@ document.getElementById('jobUrl').addEventListener('input', e => {
     document.documentElement.dataset.theme = saved;
     updateThemeIcon(saved);
     renderRecent();
+    // Restore job URL and auto-analyze from hash (supports shareable links)
+    const hashJob = location.hash.match(/[#&]job=([^&]+)/)?.[1];
+    if (hashJob) {
+      const url = decodeURIComponent(hashJob);
+      const inp = document.getElementById('jobUrl');
+      if (inp) { inp.value = url; validateUrl(url); }
+      // Auto-analyze after a brief tick so the page is ready
+      setTimeout(() => analyzeJob(), 50);
+    }
+    // Restore tab from URL hash (applied after analysis renders results)
+    const hashTab = location.hash.match(/[#&]tab=([a-z]+)/)?.[1];
+    if (hashTab && !hashJob) showTab(hashTab);
   } catch {}
 })();
 </script>
