@@ -95,7 +95,7 @@ export function buildAgentPrompt(a: DebugAnalysis, mode: PromptMode = 'focused')
     lines.push('(Sum of step finished.json time deltas; not wall-clock exclusive.)');
     for (const t of a.phaseTimings) {
       lines.push(
-        `${t.label}: ${fmtDur(t.seconds)} — ${t.timedSteps}/${t.stepCount} timed steps, status=${t.status}`,
+        `${t.label}: ${fmtDur(t.seconds)} — ${t.failedCount} failed, ${t.passedCount} passed, ${t.pendingCount} pending (status=${t.status})`,
       );
     }
     lines.push('');
