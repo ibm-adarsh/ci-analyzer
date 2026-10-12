@@ -245,22 +245,22 @@ export function ExecutionPage() {
         </section>
       ) : (
         <>
-          <section className="dbg-score" aria-label="Step counts and phase time">
-            <div className="dbg-counts">
+          <section className="dbg-score" aria-label="Phase duration and step counts">
+            <PhaseTimeline timings={a.phaseTimings} />
+            <div className="dbg-counts" aria-label="Workflow step totals">
               <div className="dbg-count">
                 <b>{passed}</b>
-                <span>Passed</span>
+                <span>Steps passed</span>
               </div>
               <div className="dbg-count fail">
                 <b>{failed}</b>
-                <span>Failed</span>
+                <span>Steps failed</span>
               </div>
               <div className="dbg-count run">
                 <b>{pending}</b>
-                <span>Pending</span>
+                <span>Steps pending</span>
               </div>
             </div>
-            <PhaseTimeline timings={a.phaseTimings} />
           </section>
 
           <section className="dbg-steps-panel">
@@ -562,9 +562,9 @@ function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
 
 function formatPhaseStepSummary(t: DebugAnalysis['phaseTimings'][number]): string {
   const parts: string[] = [];
-  if (t.failedCount) parts.push(`${t.failedCount} failed`);
-  if (t.passedCount) parts.push(`${t.passedCount} passed`);
-  if (t.pendingCount) parts.push(`${t.pendingCount} pending`);
+  if (t.failedCount) parts.push(`${t.failedCount} step${t.failedCount === 1 ? '' : 's'} failed`);
+  if (t.passedCount) parts.push(`${t.passedCount} step${t.passedCount === 1 ? '' : 's'} passed`);
+  if (t.pendingCount) parts.push(`${t.pendingCount} step${t.pendingCount === 1 ? '' : 's'} pending`);
   if (!parts.length) {
     if (t.status === 'skipped') return 'skipped';
     return `${t.stepCount} steps`;

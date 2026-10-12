@@ -1013,9 +1013,7 @@ select {
 
 .dbg-score {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 16px;
-  align-items: stretch;
+  gap: 14px;
   margin-bottom: 14px;
   padding: 16px;
   border-radius: 16px;
@@ -1023,29 +1021,37 @@ select {
   border: 1px solid var(--border);
 }
 .dbg-counts {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  min-width: 100px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
 .dbg-count {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
   padding: 10px 12px;
   border-radius: 10px;
   background: var(--surface2);
   border: 1px solid var(--border);
+  text-align: center;
 }
 .dbg-count b {
   display: block;
-  font-size: 1.4rem;
+  font-size: 1.35rem;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
+  color: var(--value);
 }
 .dbg-count span {
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 650;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--label);
 }
 .dbg-count.fail b {
   color: var(--red);
@@ -1525,15 +1531,6 @@ select {
     flex-direction: row;
     flex-wrap: wrap;
   }
-  .dbg-score {
-    grid-template-columns: 1fr;
-  }
-  .dbg-counts {
-    flex-direction: row;
-  }
-  .dbg-count {
-    flex: 1;
-  }
   .dbg-fact-grid {
     grid-template-columns: 1fr;
   }
@@ -1544,6 +1541,9 @@ select {
 
 @media (max-width: 720px) {
   .phase-tl-legend {
+    grid-template-columns: 1fr;
+  }
+  .dbg-counts {
     grid-template-columns: 1fr;
   }
 }
