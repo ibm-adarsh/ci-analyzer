@@ -13,47 +13,6 @@ function phaseForStep(ref: string): keyof typeof PHASE_META | null {
   return null;
 }
 
-/**
- * High-signal failure window for AI prompts only.
- * Avoids matching noisy words like "failed" inside unrelated info lines,
- * and never falls back to dumping the log tail (often env/API-group spam).
- */
-export function extractSnippet(log: string): string | null {
-  if (!log) return null;
-  const lines = log.split('\n');
-  const strong: RegExp[] = [
-    /^Failing tests:\s*$/i,
-    /\[Fail\]/,
-    /level=(error|fatal)\b/i,
-    /\bfatal error:/i,
-    /\bpanic:/i,
-    /bootstrap failed/i,
-    /install-config.*error/i,
-    /exit status [1-9]\d*/i,
-    /context deadline exceeded/i,
-    /Cluster upgrade.*(failed|error)/i,
-    /error:.*(?:failed|timeout|refused)/i,
-    /openshift-install.*error/i,
-  ];
-  const noise =
-    /Determined all potential environment flags|apiGroups=|feature.?gates?=|Extension openshift:payload/i;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (noise.test(line)) continue;
-    if (!strong.some((re) => re.test(line))) continue;
-    const start = Math.max(0, i - 1);
-    const end = Math.min(lines.length, i + 12);
-    const chunk = lines
-      .slice(start, end)
-      .filter((l) => !noise.test(l))
-      .join('\n')
-      .trim();
-    if (chunk.length > 40) return chunk.slice(0, 2500);
-  }
-  return null;
-}
-
 export function buildDiagnosis(input: {
   result: string;
   firstFailed: string | null;
