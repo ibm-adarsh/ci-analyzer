@@ -56,14 +56,16 @@ export interface JobPatternInfo {
 }
 
 const STEPS_CI = 'https://steps.ci.openshift.org';
-const RELEASE = 'https://github.com/openshift/release/blob/master';
+const RELEASE = 'https://github.com/openshift/release/blob/main';
 
 function refUrl(path: string): string {
   return `${RELEASE}/ci-operator/step-registry/${path}`;
 }
 
-function stepCi(kind: 'ref' | 'chain' | 'workflow', name: string): string {
-  return `${STEPS_CI}/${kind}/${name}`;
+/** steps.ci uses /reference/ for leaf refs (not /ref/), /chain/, /workflow/. */
+export function stepCi(kind: 'ref' | 'chain' | 'workflow', name: string): string {
+  const segment = kind === 'ref' ? 'reference' : kind;
+  return `${STEPS_CI}/${segment}/${name}`;
 }
 
 /** Leaf steps shared by openshift-e2e-libvirt-vpn (+ fips adds fips-check). */

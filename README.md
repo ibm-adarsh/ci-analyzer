@@ -13,7 +13,7 @@ This is **not** a fleet dashboard. One job link → workflow status, logs, artif
 | Area | Content |
 |------|---------|
 | **Status** | PASSED / FAILED / RUNNING with an explicit “what is in progress” line |
-| **Workflow** | Full `openshift-e2e-libvirt-vpn` leaf steps from [openshift/release](https://github.com/openshift/release/blob/master/ci-operator/step-registry/openshift/e2e/libvirt/vpn/openshift-e2e-libvirt-vpn-workflow.yaml) — including **pending** steps that have no GCS directory yet |
+| **Workflow** | Full `openshift-e2e-libvirt-vpn` leaf steps from [openshift/release](https://github.com/openshift/release/blob/main/ci-operator/step-registry/openshift/e2e/libvirt/vpn/openshift-e2e-libvirt-vpn-workflow.yaml) — including **pending** steps that have no GCS directory yet |
 | **Per step** | Status, duration, last ~100 log lines, key artifact links (install log, junit, must-gather, …) |
 | **Failure focus** | First non-best-effort failed step, log excerpt, pattern hypotheses (labeled, not claimed root cause) |
 | **Context** | Cluster profile, topology, OCP/BRANCH, test type, lease → LPAR, ci-operator config link |

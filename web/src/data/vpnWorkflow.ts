@@ -72,6 +72,6 @@ export function workflowForJob(jobName: string, profile?: string | null): Workfl
 
 export const WORKFLOW_SOURCE = {
   name: 'openshift-e2e-libvirt-vpn',
-  yaml: 'https://github.com/openshift/release/blob/master/ci-operator/step-registry/openshift/e2e/libvirt/vpn/openshift-e2e-libvirt-vpn-workflow.yaml',
+  yaml: 'https://github.com/openshift/release/blob/main/ci-operator/step-registry/openshift/e2e/libvirt/vpn/openshift-e2e-libvirt-vpn-workflow.yaml',
   stepsCi: 'https://steps.ci.openshift.org/workflow/openshift-e2e-libvirt-vpn',
 };

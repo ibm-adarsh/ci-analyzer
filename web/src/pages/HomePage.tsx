@@ -141,7 +141,7 @@ export function HomePage() {
         Focused on <strong>libvirt-s390x-vpn</strong> (and related Z profiles) with{' '}
         <code>openshift-e2e-libvirt-vpn</code> from{' '}
         <a
-          href="https://github.com/openshift/release/blob/master/ci-operator/step-registry/openshift/e2e/libvirt/vpn/openshift-e2e-libvirt-vpn-workflow.yaml"
+          href="https://github.com/openshift/release/blob/main/ci-operator/step-registry/openshift/e2e/libvirt/vpn/openshift-e2e-libvirt-vpn-workflow.yaml"
           target="_blank"
           rel="noreferrer"
         >

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { workflowByJobHints, workflowByName } from './workflowGuide';
+import { stepCi, workflowByJobHints, workflowByName } from './workflowGuide';
 
 describe('workflow guide helpers', () => {
   it('defaults to vpn workflow', () => {
@@ -16,5 +16,17 @@ describe('workflow guide helpers', () => {
     expect(
       workflowByJobHints('something-fips', 'openshift-e2e-libvirt-upi-heterogeneous').id,
     ).toBe('hetero');
+  });
+
+  it('builds steps.ci URLs with /reference/ (not /ref/)', () => {
+    expect(stepCi('ref', 'ipi-conf-etcd-on-ramfs')).toBe(
+      'https://steps.ci.openshift.org/reference/ipi-conf-etcd-on-ramfs',
+    );
+    expect(stepCi('chain', 'upi-conf-libvirt')).toBe(
+      'https://steps.ci.openshift.org/chain/upi-conf-libvirt',
+    );
+    expect(stepCi('workflow', 'openshift-e2e-libvirt-vpn')).toBe(
+      'https://steps.ci.openshift.org/workflow/openshift-e2e-libvirt-vpn',
+    );
   });
 });
