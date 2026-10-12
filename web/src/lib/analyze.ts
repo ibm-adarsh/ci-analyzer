@@ -1,10 +1,34 @@
-import { BEST_EFFORT_STEPS, PHASE_MAP, STEP_ORDER } from '../data/workflow';
+import { BEST_EFFORT_STEPS } from '../data/workflow';
+import { HETERO_ALIASES, VPN_WORKFLOW_STEPS, workflowForJob } from '../data/vpnWorkflow';
 import type { Analysis, JobResult, ParsedUrl, StepResult, StepStatus } from '../types';
 import { buildDiagnosis, detectPatterns, extractSnippet } from './diagnosis';
 import { fetchJson, fetchText, listPrefix } from './gcs';
 import { buildConfigLinks, enrichMetaFromProwjob, parseJobMeta } from './meta';
+import {
+  fetchReleaseFromArtifacts,
+  parseLeaseFromProwLog,
+  parseReleaseFromProwLog,
+  type ReleaseInfo,
+} from './release';
 
 export type ProgressFn = (pct: number, label: string) => void;
+
+export type WorkflowStepStatus = StepStatus | 'pending' | 'current';
+
+export interface WorkflowStepView {
+  name: string;
+  phase: 'pre' | 'test' | 'post';
+  status: WorkflowStepStatus;
+  bestEffort?: boolean;
+  via?: string;
+  observed: boolean;
+  duration: number | null;
+  patterns: { category: string; hint: string }[];
+  failureSnippet: string | null;
+  logTail: string | null;
+  stepBase: string | null;
+  keyArtifacts: { label: string; url: string }[];
+}
 
 async function discoverArtifactSubdir(bucket: string, gcsPath: string): Promise<string | null> {
   const data = await listPrefix(bucket, `${gcsPath}/artifacts/`, { delimiter: '/', maxResults: 20 });
@@ -28,9 +52,10 @@ async function fetchAllSteps(
     (dirData?.prefixes || []).map((p) => p.replace(/\/$/, '').split('/').pop()!).filter(Boolean),
   );
 
+  const configured = VPN_WORKFLOW_STEPS.map((s) => s.name);
   const toFetch = [
-    ...STEP_ORDER.filter((s) => existing.has(s)),
-    ...[...existing].filter((s) => !STEP_ORDER.includes(s as (typeof STEP_ORDER)[number])),
+    ...configured.filter((s) => existing.has(s)),
+    ...[...existing].filter((s) => !configured.includes(s)),
   ];
 
   const rawData: Record<
@@ -63,19 +88,19 @@ async function fetchAllSteps(
       else if (finJson.passed === false) status = 'failed';
       endTs = finJson.timestamp ?? null;
       if (endTs && prevEndTs) duration = Math.max(0, endTs - prevEndTs);
+    } else if (logText && logText !== '__REDACTED__') {
+      // Directory exists, finished.json missing → step is currently executing
+      if (/\+ exit [1-9]|\blevel=error\b.*exit|step failed/i.test(logText)) status = 'failed';
+      else status = 'running';
+    } else if (logText === '__REDACTED__') {
+      status = 'unknown';
     }
 
-    if (status === 'unknown' && logText && logText !== '__REDACTED__') {
-      if (/\+ exit [1-9]|\blevel=error\b.*exit|step failed/i.test(logText)) status = 'failed';
-      else if (/result.*SUCCESS|Finished OK|step.*complete/i.test(logText)) status = 'passed';
-      else status = 'running';
-    }
-    if (!finJson && !logText) status = 'unknown';
     if (endTs) prevEndTs = endTs;
 
     const safeLog = logText && logText !== '__REDACTED__' ? logText : '';
     const logTail = safeLog
-      ? safeLog.split('\n').slice(-80).join('\n')
+      ? safeLog.split('\n').slice(-100).join('\n')
       : logText === '__REDACTED__'
         ? '__REDACTED__'
         : null;
@@ -97,14 +122,127 @@ async function fetchAllSteps(
   return results;
 }
 
+function keyArtifactsFor(step: string, artBase: string): { label: string; url: string }[] {
+  const out: { label: string; url: string }[] = [
+    { label: 'build-log.txt', url: `${artBase}/${step}/build-log.txt` },
+  ];
+  if (step.includes('upi-install-libvirt') && !step.includes('network')) {
+    out.push({ label: '.openshift_install.log', url: `${artBase}/${step}/.openshift_install.log` });
+  }
+  if (step === 'openshift-e2e-libvirt-test') {
+    out.push({ label: 'artifacts/junit/', url: `${artBase}/${step}/artifacts/junit/` });
+    out.push({ label: 'e2e.log', url: `${artBase}/${step}/e2e.log` });
+  }
+  if (step === 'gather-must-gather') {
+    out.push({
+      label: 'must-gather.tar.gz',
+      url: `${artBase}/${step}/must-gather.tar.gz`,
+    });
+  }
+  return out;
+}
+
+function buildWorkflowView(
+  jobName: string,
+  profile: string | null | undefined,
+  steps: Record<string, StepResult>,
+  artBase: string,
+  jobRunning: boolean,
+): { workflow: WorkflowStepView[]; currentStep: string | null } {
+  const defs = workflowForJob(jobName, profile);
+  // Map hetero observed names onto workflow
+  const byName: Record<string, StepResult> = { ...steps };
+  for (const [hetero, canon] of Object.entries(HETERO_ALIASES)) {
+    if (steps[hetero] && !steps[canon]) byName[canon] = steps[hetero];
+  }
+
+  const workflow: WorkflowStepView[] = defs.map((d) => {
+    const obs = byName[d.name];
+    if (!obs) {
+      return {
+        name: d.name,
+        phase: d.phase,
+        status: 'pending' as const,
+        bestEffort: d.bestEffort,
+        via: d.via,
+        observed: false,
+        duration: null,
+        patterns: [],
+        failureSnippet: null,
+        logTail: null,
+        stepBase: null,
+        keyArtifacts: [],
+      };
+    }
+    return {
+      name: d.name,
+      phase: d.phase,
+      status: obs.status,
+      bestEffort: d.bestEffort || BEST_EFFORT_STEPS.has(d.name),
+      via: d.via,
+      observed: true,
+      duration: obs.duration,
+      patterns: obs.patterns,
+      failureSnippet: obs.failureSnippet,
+      logTail: obs.logTail,
+      stepBase: obs.stepBase,
+      keyArtifacts: keyArtifactsFor(d.name, artBase),
+    };
+  });
+
+  // Extra observed steps not in VPN workflow
+  for (const name of Object.keys(steps)) {
+    if (workflow.some((w) => w.name === name)) continue;
+    if (HETERO_ALIASES[name]) continue;
+    const obs = steps[name];
+    workflow.push({
+      name,
+      phase: 'pre',
+      status: obs.status,
+      observed: true,
+      duration: obs.duration,
+      patterns: obs.patterns,
+      failureSnippet: obs.failureSnippet,
+      logTail: obs.logTail,
+      stepBase: obs.stepBase,
+      keyArtifacts: keyArtifactsFor(name, artBase),
+    });
+  }
+
+  // Infer current step for running jobs
+  let currentStep: string | null = null;
+  const runningObs = workflow.find((w) => w.status === 'running');
+  if (runningObs) {
+    currentStep = runningObs.name;
+    runningObs.status = 'current';
+  } else if (jobRunning) {
+    const firstPending = workflow.find((w) => w.status === 'pending' && !w.bestEffort)
+      || workflow.find((w) => w.status === 'pending');
+    if (firstPending) {
+      currentStep = firstPending.name;
+      firstPending.status = 'current';
+    }
+  }
+
+  return { workflow, currentStep };
+}
+
+export interface DebugAnalysis extends Analysis {
+  workflow: WorkflowStepView[];
+  currentStep: string | null;
+  release: ReleaseInfo | null;
+  leaseSlot: string | null;
+  progressSummary: string;
+}
+
 export async function analyzeExecution(
   parsed: ParsedUrl,
   onProgress?: ProgressFn,
-): Promise<Analysis> {
+): Promise<DebugAnalysis> {
   const { bucket, gcsPath, jobName, buildId, raw } = parsed;
   const base = `https://storage.googleapis.com/${bucket}/${gcsPath}`;
 
-  onProgress?.(10, 'Fetching job metadata…');
+  onProgress?.(8, 'Fetching job metadata…');
   const [started, finished, prowjob, prowLog] = await Promise.all([
     fetchJson<{ timestamp?: number }>(`${base}/started.json`),
     fetchJson<{ passed?: boolean; timestamp?: number; result?: string }>(`${base}/finished.json`),
@@ -112,14 +250,21 @@ export async function analyzeExecution(
     fetchText(`${base}/build-log.txt`),
   ]);
 
-  onProgress?.(30, 'Discovering artifact layout…');
+  onProgress?.(25, 'Discovering artifacts…');
   const testSubdir = await discoverArtifactSubdir(bucket, gcsPath);
   const artBase = testSubdir ? `${base}/artifacts/${testSubdir}` : `${base}/artifacts`;
 
-  onProgress?.(50, `Fetching steps (${testSubdir || 'root'})…`);
+  onProgress?.(45, 'Reading step logs…');
   const steps = await fetchAllSteps(artBase, bucket, gcsPath, testSubdir, started);
 
-  onProgress?.(85, 'Analyzing failures…');
+  onProgress?.(70, 'Resolving release / lease…');
+  let release = parseReleaseFromProwLog(prowLog);
+  if (!release?.tag) {
+    release = (await fetchReleaseFromArtifacts(base)) || release;
+  }
+  const leaseSlot = parseLeaseFromProwLog(prowLog);
+
+  onProgress?.(85, 'Building debug view…');
   const meta = parseJobMeta(jobName);
   enrichMetaFromProwjob(meta, prowjob);
 
@@ -135,48 +280,50 @@ export async function analyzeExecution(
             ? 'FAILED'
             : prowjobState === 'aborted'
               ? 'ABORTED'
-              : prowjobState === 'pending' || prowjobState === 'triggered'
+              : prowjobState === 'pending' || prowjobState === 'triggered' || !finished
                 ? 'RUNNING'
-                : finished
-                  ? 'UNKNOWN'
-                  : 'RUNNING';
+                : 'UNKNOWN';
 
-  const counts: Record<StepStatus, number> = {
-    passed: 0,
-    failed: 0,
-    skipped: 0,
-    unknown: 0,
-    running: 0,
-  };
+  const counts = { passed: 0, failed: 0, skipped: 0, unknown: 0, running: 0 };
   for (const n of Object.keys(steps)) {
     const s = steps[n].status;
     counts[s] = (counts[s] || 0) + 1;
   }
 
-  const allStepNames = Object.keys(steps);
+  const configuredNames = VPN_WORKFLOW_STEPS.map((s) => s.name);
   const orderedForFailure = [
-    ...STEP_ORDER.filter((s) => allStepNames.includes(s)),
-    ...allStepNames.filter((s) => !STEP_ORDER.includes(s as (typeof STEP_ORDER)[number])),
+    ...configuredNames.filter((s) => steps[s]?.status === 'failed'),
+    ...Object.keys(steps).filter((s) => steps[s]?.status === 'failed' && !configuredNames.includes(s)),
   ];
-  const failedSteps = orderedForFailure.filter((s) => steps[s]?.status === 'failed');
-  const firstFailed = failedSteps.find((s) => !BEST_EFFORT_STEPS.has(s)) || failedSteps[0] || null;
-  const secondaryFailed = failedSteps.filter((s) => s !== firstFailed);
+  // Prefer first failed in workflow order
+  const failedInOrder = configuredNames.filter((s) => steps[s]?.status === 'failed');
+  const firstFailed =
+    failedInOrder.find((s) => !BEST_EFFORT_STEPS.has(s)) || failedInOrder[0] || orderedForFailure[0] || null;
+  const secondaryFailed = Object.keys(steps).filter(
+    (s) => steps[s]?.status === 'failed' && s !== firstFailed,
+  );
 
   const phaseStatus: Record<string, string> = {};
-  for (const [ph, refs] of Object.entries(PHASE_MAP)) {
-    const existing = refs.filter((r) => steps[r]);
-    if (!existing.length) {
+  const { workflow, currentStep } = buildWorkflowView(
+    jobName,
+    meta.profile,
+    steps,
+    artBase,
+    result === 'RUNNING',
+  );
+
+  for (const ph of ['pre', 'test', 'post'] as const) {
+    const group = workflow.filter((w) => w.phase === ph);
+    if (!group.length) {
       phaseStatus[ph] = 'skipped';
       continue;
     }
-    const sts = existing.map((r) => steps[r].status);
-    phaseStatus[ph] = sts.some((s) => s === 'failed')
-      ? 'failed'
-      : sts.every((s) => s === 'passed')
-        ? 'passed'
-        : sts.every((s) => s === 'skipped' || s === 'unknown')
-          ? 'skipped'
-          : 'running';
+    if (group.some((w) => w.status === 'failed')) phaseStatus[ph] = 'failed';
+    else if (group.some((w) => w.status === 'current' || w.status === 'running')) phaseStatus[ph] = 'running';
+    else if (group.every((w) => w.status === 'passed' || (w.bestEffort && w.status === 'pending')))
+      phaseStatus[ph] = group.every((w) => w.status === 'passed') ? 'passed' : 'running';
+    else if (group.every((w) => w.status === 'pending')) phaseStatus[ph] = 'pending';
+    else phaseStatus[ph] = 'running';
   }
 
   const diagnosis = buildDiagnosis({
@@ -189,6 +336,22 @@ export async function analyzeExecution(
     counts,
   });
   const configLinks = buildConfigLinks(jobName, meta);
+
+  let progressSummary = '';
+  if (result === 'RUNNING') {
+    if (currentStep) {
+      const w = workflow.find((x) => x.name === currentStep);
+      progressSummary = w?.observed && w.status === 'current' && steps[currentStep]?.status === 'running'
+        ? `In progress: ${currentStep} (step directory present, finished.json not written yet)`
+        : `In progress: waiting for / starting ${currentStep} (${w?.phase?.toUpperCase()} phase). ${counts.passed} step(s) completed; later workflow steps have no artifact directory yet.`;
+    } else {
+      progressSummary = 'Job is running but the current step could not be inferred.';
+    }
+  } else if (result === 'FAILED' && firstFailed) {
+    progressSummary = `Failed at ${firstFailed}.`;
+  } else if (result === 'PASSED') {
+    progressSummary = 'All observed steps passed; job finished successfully.';
+  }
 
   onProgress?.(100, 'Done');
 
@@ -212,8 +375,15 @@ export async function analyzeExecution(
     firstFailed,
     secondaryFailed,
     phaseStatus,
-    orderedForFailure,
+    orderedForFailure: configuredNames.filter((n) => steps[n]).concat(
+      Object.keys(steps).filter((n) => !configuredNames.includes(n)),
+    ),
     diagnosis,
     configLinks,
+    workflow,
+    currentStep,
+    release,
+    leaseSlot,
+    progressSummary,
   };
 }

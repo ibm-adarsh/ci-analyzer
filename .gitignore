@@ -6,6 +6,9 @@ web/node_modules/
 web/dist/
 web/.vite/
 
+# Local research clones
+.cache/
+
 # OS / editor
 .DS_Store
 *.log

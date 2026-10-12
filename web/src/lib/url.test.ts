@@ -54,6 +54,18 @@ describe('meta classification', () => {
   });
 });
 
+describe('vpn workflow pending', () => {
+  it('lists openshift-e2e-libvirt-test after conf in configured order', async () => {
+    const { VPN_WORKFLOW_STEPS } = await import('../data/vpnWorkflow');
+    const names = VPN_WORKFLOW_STEPS.map((s) => s.name);
+    const conf = names.indexOf('openshift-e2e-libvirt-conf');
+    const test = names.indexOf('openshift-e2e-libvirt-test');
+    expect(conf).toBeGreaterThan(-1);
+    expect(test).toBeGreaterThan(conf);
+    expect(names).toContain('upi-libvirt-cleanup-post');
+  });
+});
+
 describe('diagnosis', () => {
   it('labels hypotheses and prefers non-best-effort primary', () => {
     const d = buildDiagnosis({

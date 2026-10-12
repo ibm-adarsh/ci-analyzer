@@ -25,27 +25,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Link to="/" className="brand" style={{ textDecoration: 'none', color: 'inherit' }}>
           <div className="brand-mark">Z</div>
           <div>
-            <h1>IBM Z · CI Debugging Workbench</h1>
-            <p>OpenShift CI · Prow · s390x / z-z / z-za</p>
+            <h1>IBM Z · Job Debugger</h1>
+            <p>Paste a Prow URL · vpn / vpn-oz · libvirt workflow</p>
           </div>
         </Link>
         <div className="topbar-actions">
-          <a
-            className="btn"
-            href="https://prow.ci.openshift.org/?job=*z-z"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Prow *z-z
-          </a>
-          <a
-            className="btn"
-            href="https://prow.ci.openshift.org/?job=*s390x"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Prow *s390x
-          </a>
           <button
             type="button"
             className="btn"
