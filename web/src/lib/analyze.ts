@@ -343,7 +343,7 @@ export async function analyzeExecution(
         ? 'FAILED'
         : prowjobState === 'success'
           ? 'PASSED'
-          : prowjobState === 'failure'
+          : prowjobState === 'failure' || prowjobState === 'error'
             ? 'FAILED'
             : prowjobState === 'aborted'
               ? 'ABORTED'

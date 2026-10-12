@@ -38,6 +38,17 @@ describe('lease + release parsing', () => {
     expect(rel?.pullSpec).not.toContain('ppc64le');
   });
 
+  it('does not treat s390x-latest as upgrade-from initial', () => {
+    const log = `
+Imported release 5.0.0-0.nightly-s390x-2026-10-12-040926 created at 2026-10-12 04:10:45 +0000 UTC with 196 images to tag release:s390x-latest
+Imported release 5.0.0-0.nightly-multi-2026-10-11-210711 created at 2026-10-11 23:47:33 +0000 UTC with 197 images to tag release:latest
+Resolved release multi-latest to quay.io/openshift-release-dev/ocp-release-nightly@sha256:abc
+`;
+    const rel = parseReleaseFromProwLog(log);
+    expect(rel?.tag).toBe('5.0.0-0.nightly-multi-2026-10-11-210711');
+    expect(rel?.initialTag).toBeNull();
+  });
+
   it('reads observed qemu URI from step logs and prefers it over static map', () => {
     const steps = {
       'upi-libvirt-cleanup-post': {

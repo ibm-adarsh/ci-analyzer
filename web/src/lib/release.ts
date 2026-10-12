@@ -39,17 +39,17 @@ export function parseReleaseFromProwLog(prowLog: string | null): ReleaseInfo | n
   let initialTag: string | null = null;
 
   if (imported.length) {
+    // Only treat release:initial as an upgrade-from payload — not a secondary
+    // stream like release:s390x-latest on single-arch jobs.
     for (const m of imported) {
       if (m[3] === 'initial') initialTag = m[1];
     }
     const latest =
-      imported.find((m) => m[3] === 'latest') || imported[imported.length - 1];
+      imported.find((m) => m[3] === 'latest') ||
+      imported.find((m) => m[3] === 's390x-latest') ||
+      imported[imported.length - 1];
     tag = latest[1];
     createdAt = latest[2]?.trim() || null;
-    if (!initialTag) {
-      const other = imported.find((m) => m[1] !== tag);
-      if (other) initialTag = other[1];
-    }
   } else if (importing) {
     tag = importing[1];
     createdAt = importing[2]?.replace(/\s+with\s+\d+\s+images.*$/i, '').trim() || null;
