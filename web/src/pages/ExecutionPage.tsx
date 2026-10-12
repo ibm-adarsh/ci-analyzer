@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { analyzeExecution, type DebugAnalysis, type WorkflowStepView } from '../lib/analyze';
 import { buildAgentPrompt } from '../lib/agentPrompt';
@@ -6,9 +6,28 @@ import { fmtDur } from '../lib/gcs';
 import { releaseBrowserLinks } from '../lib/release';
 import { parseExecutionRoute } from '../lib/url';
 import { WORKFLOW_SOURCE } from '../data/vpnWorkflow';
+import { RELEASE_REPO, STEPS_CI } from '../data/workflow';
 import { StatusBadge } from '../components/StatusBadge';
 import { WorkflowGuideView } from '../components/WorkflowGuideView';
 import { resolveLpar } from '../lib/lparResolve';
+
+const WORKFLOW_YAML: Record<string, string> = {
+  'openshift-e2e-libvirt-vpn':
+    `${RELEASE_REPO}/blob/main/ci-operator/step-registry/openshift/e2e/libvirt/vpn/openshift-e2e-libvirt-vpn-workflow.yaml`,
+  'openshift-e2e-libvirt-vpn-fips':
+    `${RELEASE_REPO}/blob/main/ci-operator/step-registry/openshift/e2e/libvirt/vpn/fips/openshift-e2e-libvirt-vpn-fips-workflow.yaml`,
+  'openshift-e2e-libvirt-upi-heterogeneous':
+    `${RELEASE_REPO}/blob/main/ci-operator/step-registry/openshift/e2e/libvirt/upi/heterogeneous/openshift-e2e-libvirt-upi-heterogeneous-workflow.yaml`,
+};
+
+function workflowDocs(name: string | null) {
+  const n = name || WORKFLOW_SOURCE.name;
+  return {
+    name: n,
+    stepsCi: `${STEPS_CI}/workflow/${n}`,
+    yaml: WORKFLOW_YAML[n] || WORKFLOW_SOURCE.yaml,
+  };
+}
 
 type PageTab = 'debug' | 'prompt' | 'guide';
 
@@ -130,6 +149,7 @@ export function ExecutionPage() {
   const failed = a.workflow.filter((w) => w.status === 'failed').length;
   const passed = a.workflow.filter((w) => w.status === 'passed').length;
   const wfName = a.meta.workflow || WORKFLOW_SOURCE.name;
+  const wfDocs = workflowDocs(wfName);
   const configUrl = a.configLinks.links.find((l) => l.label.includes('ci-operator config'))?.url;
 
   const chips: { label: string; value: string }[] = [
@@ -247,10 +267,10 @@ export function ExecutionPage() {
             <div className="dbg-section-head">
               <h2>Workflow steps</h2>
               <div className="dbg-section-links">
-                <a href={WORKFLOW_SOURCE.stepsCi} target="_blank" rel="noreferrer">
-                  {wfName}
+                <a href={wfDocs.stepsCi} target="_blank" rel="noreferrer">
+                  {wfDocs.name}
                 </a>
-                <a href={WORKFLOW_SOURCE.yaml} target="_blank" rel="noreferrer">
+                <a href={wfDocs.yaml} target="_blank" rel="noreferrer">
                   YAML
                 </a>
               </div>
@@ -284,145 +304,216 @@ export function ExecutionPage() {
             })}
           </section>
 
-          <section className="dbg-tech">
-            <button
-              type="button"
-              className="dbg-tech-toggle"
-              onClick={() => setShowTech((v) => !v)}
-              aria-expanded={showTech}
-            >
-              <span>Job details</span>
-              <span className="muted">{showTech ? 'Hide' : 'Show lease, release, config…'}</span>
-              <span aria-hidden>{showTech ? '−' : '+'}</span>
-            </button>
-            {showTech && (
-              <div className="dbg-tech-body">
-                <Detail label="Started" value={start} />
-                <Detail
-                  label="Workflow"
-                  value={
-                    <>
-                      <code>{wfName}</code>{' '}
-                      <a href={WORKFLOW_SOURCE.stepsCi} target="_blank" rel="noreferrer">
-                        steps.ci
-                      </a>{' '}
-                      <a href={WORKFLOW_SOURCE.yaml} target="_blank" rel="noreferrer">
-                        YAML
-                      </a>
-                    </>
-                  }
-                />
-                <Detail label="Artifact subdir" value={<code>{a.testSubdir || '—'}</code>} />
-                <Detail label="Cluster profile" value={<code>{a.meta.profile || '—'}</code>} />
-                <Detail
-                  label="Lease / LPAR"
-                  value={
-                    a.leaseSlot ? (
-                      <>
-                        <code>{a.leaseSlot}</code>
-                        {lpar ? (
-                          <span className="muted">
-                            {' '}
-                            → {lpar.lpar}
-                            {lpar.observed ? '' : ' (inferred)'}
-                          </span>
-                        ) : null}
-                        {a.lease?.pool ? (
-                          <div className="muted mono" style={{ marginTop: 4 }}>
-                            pool {a.lease.pool}
-                          </div>
-                        ) : null}
-                      </>
-                    ) : (
-                      <span className="muted">Not in root build-log / step logs yet</span>
-                    )
-                  }
-                />
-                {(lpar?.qemuUri || a.lease?.qemuUri) && (
-                  <Detail
-                    label="Libvirt URI"
-                    value={
-                      <>
-                        <code className="dbg-break">{a.lease?.qemuUri || lpar?.qemuUri}</code>
-                        {a.lease?.connectionSource ? (
-                          <div className="muted" style={{ marginTop: 4 }}>
-                            from {a.lease.connectionSource}
-                          </div>
-                        ) : lpar && !lpar.observed ? (
-                          <div className="muted" style={{ marginTop: 4 }}>
-                            inferred from lease index (leases secret not in artifacts)
-                          </div>
-                        ) : null}
-                      </>
-                    }
-                  />
-                )}
-                <Detail
-                  label="Release"
-                  value={
-                    a.release?.tag ? (
-                      <>
-                        <code>{a.release.tag}</code>
-                        {a.release.createdAt ? (
-                          <span className="muted"> · {a.release.createdAt}</span>
-                        ) : null}
-                        {a.release.initialTag ? (
-                          <div className="muted mono" style={{ marginTop: 4 }}>
-                            upgrade from <code>{a.release.initialTag}</code>
-                          </div>
-                        ) : null}
-                        <div className="dbg-inline-links">
-                          {releaseLinks.map((l) => (
-                            <a key={l.url} href={l.url} target="_blank" rel="noreferrer">
-                              {l.label}
-                            </a>
-                          ))}
-                        </div>
-                      </>
-                    ) : (
-                      <span className="muted">Not resolved yet</span>
-                    )
-                  }
-                />
-                {a.release?.pullSpec && (
-                  <Detail
-                    label="Release pullspec"
-                    value={<code className="dbg-break">{a.release.pullSpec}</code>}
-                  />
-                )}
-                {a.release?.installTarget && (
-                  <Detail
-                    label="Install image"
-                    value={<code className="dbg-break">{a.release.installTarget}</code>}
-                  />
-                )}
-                <Detail
-                  label="ci-operator config"
-                  value={
-                    configUrl ? (
-                      <a href={configUrl} target="_blank" rel="noreferrer">
-                        {a.configLinks.org}/{a.configLinks.repo} __{a.configLinks.variant}.yaml
-                      </a>
-                    ) : (
-                      <span className="muted">unresolved</span>
-                    )
-                  }
-                />
-              </div>
-            )}
-          </section>
+          <JobDetailsPanel
+            a={a}
+            start={start}
+            lpar={lpar}
+            wfName={wfName}
+            releaseLinks={releaseLinks}
+            configUrl={configUrl || null}
+            open={showTech}
+            onToggle={() => setShowTech((v) => !v)}
+          />
         </>
       )}
     </div>
   );
 }
 
-function Detail({ label, value }: { label: string; value: ReactNode }) {
+function JobDetailsPanel({
+  a,
+  start,
+  lpar,
+  wfName,
+  releaseLinks,
+  configUrl,
+  open,
+  onToggle,
+}: {
+  a: DebugAnalysis;
+  start: string;
+  lpar: ReturnType<typeof resolveLpar>;
+  wfName: string;
+  releaseLinks: { label: string; url: string }[];
+  configUrl: string | null;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const docs = workflowDocs(a.meta.workflow || wfName);
+  const qemu = a.lease?.qemuUri || lpar?.qemuUri || null;
+  const cfgLabel = a.configLinks.variant
+    ? `${a.configLinks.org}-${a.configLinks.repo}-${a.configLinks.branch}__${a.configLinks.variant}.yaml`
+    : null;
+
   return (
-    <div className="dbg-detail">
-      <span>{label}</span>
-      <div>{value}</div>
-    </div>
+    <section className="dbg-tech">
+      <button
+        type="button"
+        className="dbg-tech-toggle"
+        onClick={onToggle}
+        aria-expanded={open}
+      >
+        <span>Job details</span>
+        <span className="muted">
+          {open ? 'Hide' : 'Lease, LPAR, release, config'}
+        </span>
+        <span aria-hidden>{open ? '−' : '+'}</span>
+      </button>
+      {open && (
+        <div className="dbg-tech-body">
+          <div className="dbg-fact-grid">
+            <article className="dbg-fact">
+              <h3>Environment</h3>
+              <dl>
+                <div>
+                  <dt>Cluster profile</dt>
+                  <dd>
+                    <code>{a.meta.profile || '—'}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Lease → LPAR</dt>
+                  <dd>
+                    {a.leaseSlot ? (
+                      <div className="dbg-lease-path">
+                        <code>{a.leaseSlot}</code>
+                        <span className="dbg-lease-arrow" aria-hidden>
+                          →
+                        </span>
+                        <strong>{lpar?.lpar || '?'}</strong>
+                        {lpar && !lpar.observed ? (
+                          <em className="muted">inferred</em>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <span className="muted">Not in build-log / step logs yet</span>
+                    )}
+                    {a.lease?.pool ? (
+                      <div className="dbg-fact-meta mono">{a.lease.pool}</div>
+                    ) : null}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Libvirt URI</dt>
+                  <dd>
+                    {qemu ? (
+                      <>
+                        <code className="dbg-break">{qemu}</code>
+                        <div className="dbg-fact-meta">
+                          {a.lease?.connectionSource
+                            ? `from ${a.lease.connectionSource}`
+                            : lpar && !lpar.observed
+                              ? 'inferred from lease index'
+                              : null}
+                        </div>
+                      </>
+                    ) : (
+                      <span className="muted">Not observed in step logs yet</span>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            </article>
+
+            <article className="dbg-fact">
+              <h3>Release</h3>
+              <dl>
+                <div>
+                  <dt>{a.release?.initialTag ? 'Target (latest)' : 'Build tag'}</dt>
+                  <dd>
+                    {a.release?.tag ? (
+                      <>
+                        <code>{a.release.tag}</code>
+                        {a.release.createdAt ? (
+                          <div className="dbg-fact-meta">{a.release.createdAt}</div>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className="muted">Not resolved yet</span>
+                    )}
+                  </dd>
+                </div>
+                {a.release?.initialTag ? (
+                  <div>
+                    <dt>Upgrade from</dt>
+                    <dd>
+                      <code>{a.release.initialTag}</code>
+                    </dd>
+                  </div>
+                ) : null}
+                {a.release?.pullSpec ? (
+                  <div>
+                    <dt>Pullspec</dt>
+                    <dd>
+                      <code className="dbg-break">{a.release.pullSpec}</code>
+                    </dd>
+                  </div>
+                ) : null}
+                {a.release?.installTarget ? (
+                  <div>
+                    <dt>Install image</dt>
+                    <dd>
+                      <code className="dbg-break">{a.release.installTarget}</code>
+                    </dd>
+                  </div>
+                ) : null}
+              </dl>
+              {releaseLinks.length > 0 && (
+                <div className="dbg-fact-links">
+                  {releaseLinks.map((l) => (
+                    <a key={l.url} href={l.url} target="_blank" rel="noreferrer">
+                      {l.label} ↗
+                    </a>
+                  ))}
+                </div>
+              )}
+            </article>
+
+            <article className="dbg-fact">
+              <h3>Config</h3>
+              <dl>
+                <div>
+                  <dt>Started</dt>
+                  <dd>{start}</dd>
+                </div>
+                <div>
+                  <dt>Workflow</dt>
+                  <dd>
+                    <code>{docs.name}</code>
+                    <div className="dbg-fact-links">
+                      <a href={docs.stepsCi} target="_blank" rel="noreferrer">
+                        steps.ci ↗
+                      </a>
+                      <a href={docs.yaml} target="_blank" rel="noreferrer">
+                        YAML ↗
+                      </a>
+                    </div>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Artifact subdir</dt>
+                  <dd>
+                    <code>{a.testSubdir || '—'}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>ci-operator config</dt>
+                  <dd>
+                    {configUrl && cfgLabel ? (
+                      <a href={configUrl} target="_blank" rel="noreferrer">
+                        {cfgLabel} ↗
+                      </a>
+                    ) : (
+                      <span className="muted">unresolved</span>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            </article>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
