@@ -35,13 +35,25 @@ export interface WorkflowStepView {
   keyArtifacts: { label: string; url: string }[];
 }
 
-async function discoverArtifactSubdir(bucket: string, gcsPath: string): Promise<string | null> {
-  const data = await listPrefix(bucket, `${gcsPath}/artifacts/`, { delimiter: '/', maxResults: 20 });
+const NON_TEST_ARTIFACT_DIRS = new Set(['build-resources', 'release', 'job_labels']);
+
+/** Pick the ci-operator test artifact directory (not build-resources / release / job_labels). */
+async function discoverArtifactSubdir(
+  bucket: string,
+  gcsPath: string,
+  jobName: string,
+): Promise<string | null> {
+  const data = await listPrefix(bucket, `${gcsPath}/artifacts/`, { delimiter: '/', maxResults: 40 });
   if (!data?.prefixes) return null;
   const candidates = data.prefixes
     .map((p) => p.replace(/\/$/, '').split('/').pop()!)
-    .filter((n) => n && n !== 'build-resources' && n !== 'release');
-  return candidates[0] || null;
+    .filter((n) => n && !NON_TEST_ARTIFACT_DIRS.has(n));
+  if (!candidates.length) return null;
+  // Prefer directory whose name is embedded in the Prow job name (e.g. ocp-fips-…-z-z).
+  const named = candidates.find((c) => jobName.includes(c));
+  if (named) return named;
+  // Prefer the longest name (test dirs are usually more specific than misc folders).
+  return [...candidates].sort((a, b) => b.length - a.length)[0] || null;
 }
 
 async function fetchAllSteps(
@@ -304,7 +316,7 @@ export async function analyzeExecution(
   ]);
 
   onProgress?.(25, 'Discovering artifacts…');
-  const testSubdir = await discoverArtifactSubdir(bucket, gcsPath);
+  const testSubdir = await discoverArtifactSubdir(bucket, gcsPath, jobName);
   const artBase = testSubdir ? `${base}/artifacts/${testSubdir}` : `${base}/artifacts`;
 
   onProgress?.(45, 'Reading step logs…');
