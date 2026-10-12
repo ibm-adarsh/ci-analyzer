@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <title>IBM Z CI Job Analyzer</title>
+  <title>IBM Z · Job Debugging Workbench</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1721,7 +1721,210 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 }
 .gantt-phase-total strong { color: var(--text2); font-family: 'JetBrains Mono', monospace; }
 .gantt-phase-divider { height: 1px; background: var(--border); margin: 2px 0 6px 240px; }
-  </style>
+  
+/* ── Workbench: Investigation panel ─────────────────────────────── */
+.inv-panel { display:flex; flex-direction:column; gap:14px; }
+.inv-hero {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px 20px;
+  box-shadow: var(--shadow-sm);
+}
+.inv-hero.fail { border-left: 4px solid var(--red); }
+.inv-hero.pass { border-left: 4px solid var(--green); }
+.inv-hero.run  { border-left: 4px solid var(--accent); }
+.inv-kicker { font-size:10px; font-weight:700; letter-spacing:.7px; text-transform:uppercase; color:var(--muted); margin-bottom:4px; }
+.inv-title { font-size:18px; font-weight:700; font-family:'JetBrains Mono',monospace; letter-spacing:-.02em; }
+.inv-sub { font-size:12px; color:var(--text2); margin-top:6px; line-height:1.55; }
+.inv-actions { display:flex; flex-direction:column; gap:6px; align-items:flex-end; }
+.inv-grid {
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap:12px;
+}
+.inv-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.inv-card h3 {
+  font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.6px;
+  color: var(--muted); margin-bottom:10px; display:flex; align-items:center; gap:6px;
+}
+.inv-fact { font-size:12.5px; margin-bottom:8px; line-height:1.5; }
+.inv-fact strong { color: var(--text); font-weight:600; }
+.inv-fact code { font-size:11px; }
+.inv-hyp {
+  background: var(--yellow-bg);
+  border: 1px solid rgba(227,179,65,.35);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size:12px;
+  color: var(--text2);
+  margin-top: 6px;
+}
+.inv-hyp .tag {
+  display:inline-block; font-size:9.5px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.5px; color: var(--yellow); margin-bottom:4px;
+}
+.inv-next { list-style:none; display:flex; flex-direction:column; gap:6px; }
+.inv-next li {
+  display:flex; gap:8px; align-items:flex-start;
+  font-size:12.5px; color: var(--text2); line-height:1.45;
+  padding: 7px 9px; border-radius:7px; background: var(--surface2); border:1px solid var(--border);
+}
+.inv-next .n { font-weight:700; color: var(--accent); font-family:'JetBrains Mono',monospace; font-size:11px; min-width:18px; }
+.inv-ev-list { display:flex; flex-direction:column; gap:6px; }
+.inv-ev-row {
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  font-size:12px; padding:7px 9px; border-radius:7px;
+  background: var(--surface2); border:1px solid var(--border);
+}
+.inv-ev-row.primary { border-color: rgba(248,81,73,.4); background: var(--red-bg); }
+.inv-ev-row .ev-label { font-weight:600; color: var(--text); }
+.inv-ev-row .ev-meta { color: var(--muted); font-size:11px; }
+.inv-sec-fail {
+  font-size:11.5px; color: var(--text3); padding:6px 0 0;
+  border-top: 1px dashed var(--border); margin-top:8px;
+}
+.inv-sec-fail code { font-size:10.5px; }
+
+/* ── Workbench: Artifact explorer ───────────────────────────────── */
+.artx-toolbar {
+  display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+  margin-bottom:12px;
+}
+.artx-toolbar input {
+  flex:1; min-width:180px;
+  background: var(--surface2); border:1px solid var(--border);
+  color: var(--text); border-radius:7px; padding:7px 10px; font-size:12.5px;
+}
+.artx-toolbar select {
+  background: var(--surface2); border:1px solid var(--border);
+  color: var(--text); border-radius:7px; padding:7px 10px; font-size:12px;
+}
+.artx-crumb {
+  font-size:11.5px; color: var(--muted); margin-bottom:10px;
+  display:flex; flex-wrap:wrap; gap:4px; align-items:center;
+}
+.artx-crumb a { color: var(--accent); cursor:pointer; }
+.artx-crumb span.sep { opacity:.4; }
+.artx-table { width:100%; border-collapse:collapse; font-size:12.5px; }
+.artx-table th {
+  text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.5px;
+  color: var(--muted); padding:6px 8px; border-bottom:1px solid var(--border);
+}
+.artx-table td { padding:7px 8px; border-bottom:1px solid var(--border); vertical-align:middle; }
+.artx-table tr:hover td { background: var(--surface2); }
+.artx-table .name { font-family:'JetBrains Mono',monospace; font-size:11.5px; }
+.artx-table .name a { color: var(--text); }
+.artx-table .name a:hover { color: var(--accent); }
+.artx-badge {
+  font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.4px;
+  padding:2px 6px; border-radius:4px; background: var(--surface3); color: var(--text3);
+}
+.artx-badge.relevant { background: var(--red-bg); color: var(--red); border:1px solid rgba(248,81,73,.3); }
+.artx-badge.step { background: rgba(88,166,255,.12); color: var(--accent); }
+.artx-empty { padding:28px; text-align:center; color: var(--muted); font-size:13px; }
+.artx-preview {
+  margin-top:12px; background: var(--bg); border:1px solid var(--border);
+  border-radius:8px; max-height:360px; overflow:auto;
+}
+.artx-preview pre {
+  margin:0; padding:12px; font-size:11.5px; line-height:1.45;
+  white-space:pre-wrap; word-break:break-word; font-family:'JetBrains Mono',monospace;
+}
+
+/* ── Workbench: Job browser ─────────────────────────────────────── */
+.job-browser {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-sm);
+}
+.job-browser h3 {
+  font-size:13px; font-weight:700; margin-bottom:10px;
+  display:flex; align-items:center; gap:8px;
+}
+.jb-filters { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; align-items:center; }
+.jb-filters button {
+  background: var(--surface2); border:1px solid var(--border);
+  color: var(--text2); border-radius:6px; padding:5px 10px; font-size:11.5px; font-weight:600;
+}
+.jb-filters button.active { background: var(--accent-glow); border-color: var(--accent); color: var(--accent); }
+.jb-filters input {
+  flex:1; min-width:160px;
+  background: var(--surface2); border:1px solid var(--border);
+  color: var(--text); border-radius:6px; padding:5px 10px; font-size:12px;
+}
+.jb-list { display:flex; flex-direction:column; gap:4px; max-height:280px; overflow:auto; }
+.jb-row {
+  display:grid; grid-template-columns: auto 1fr auto auto; gap:10px; align-items:center;
+  padding:7px 10px; border-radius:7px; border:1px solid transparent; cursor:pointer;
+  font-size:12px;
+}
+.jb-row:hover { background: var(--surface2); border-color: var(--border); }
+.jb-row .res { font-size:10px; font-weight:700; min-width:52px; }
+.jb-row .res.pass { color: var(--green); }
+.jb-row .res.fail { color: var(--red); }
+.jb-row .res.run  { color: var(--accent); }
+.jb-row .jname { font-family:'JetBrains Mono',monospace; font-size:11px; color: var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.jb-row .meta { color: var(--muted); font-size:10.5px; white-space:nowrap; }
+.jb-row .arch {
+  font-size:9.5px; font-weight:700; padding:2px 6px; border-radius:4px;
+  background: var(--surface3); color: var(--text3);
+}
+.jb-status { font-size:11.5px; color: var(--muted); margin-top:8px; }
+
+/* ── Workbench: Config correlation ──────────────────────────────── */
+.cfg-grid {
+  display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:12px;
+}
+.cfg-card {
+  background: var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px;
+}
+.cfg-card h3 { font-size:12px; font-weight:700; margin-bottom:10px; color: var(--text); }
+.cfg-row { display:grid; grid-template-columns:120px 1fr; gap:6px 10px; font-size:12px; margin-bottom:6px; }
+.cfg-row .ck { color: var(--muted); }
+.cfg-row .cv { color: var(--text); word-break:break-all; font-family:'JetBrains Mono',monospace; font-size:11px; }
+.cfg-links { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.cfg-links a {
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:11.5px; font-weight:600; padding:5px 10px; border-radius:6px;
+  background: var(--surface2); border:1px solid var(--border); color: var(--accent); text-decoration:none;
+}
+.cfg-links a:hover { border-color: var(--accent); background: var(--accent-glow); text-decoration:none; }
+.cfg-note { font-size:11.5px; color: var(--muted); margin-top:8px; line-height:1.5; }
+.cfg-unresolved {
+  background: var(--yellow-bg); border:1px solid rgba(227,179,65,.3);
+  border-radius:7px; padding:8px 10px; font-size:12px; color: var(--text2); margin-top:8px;
+}
+
+/* Compact overview step nav */
+.overview-nav {
+  background: var(--surface); border:1px solid var(--border); border-radius:10px;
+  padding:12px 14px; margin-top:12px;
+}
+.overview-nav h3 { font-size:12px; font-weight:700; margin-bottom:8px; }
+.ov-step-chip {
+  display:inline-flex; align-items:center; gap:5px;
+  font-size:11px; font-family:'JetBrains Mono',monospace;
+  padding:3px 8px; border-radius:5px; margin:2px;
+  background: var(--surface2); border:1px solid var(--border); cursor:pointer; color: var(--text2);
+}
+.ov-step-chip.failed { border-color: rgba(248,81,73,.45); color: var(--red); background: var(--red-bg); }
+.ov-step-chip.passed { color: var(--green); }
+.ov-step-chip.running { color: var(--accent); }
+.ov-step-chip:hover { border-color: var(--accent); }
+
+</style>
 </head>
 <body>
 <header class="header" role="banner">
@@ -1736,8 +1939,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 
     <!-- Brand block -->
     <div class="header-brand">
-      <div class="header-brand-top">IBM Z · Prow Job Analyzer</div>
-      <div class="header-brand-sub">openshift-e2e-libvirt-vpn · z-z / z-za · Live GCS</div>
+      <div class="header-brand-top">IBM Z · Job Debugging Workbench</div>
+      <div class="header-brand-sub">Evidence-driven failure analysis · z-z / z-za / s390x · Live GCS</div>
     </div>
 
     <!-- Centre: current job name + result badge (populated after analysis) -->
@@ -1811,7 +2014,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
       <span style="opacity:.3;margin:0 2px">·</span>
       <span class="hctx-kbd">/</span> search
       <span style="opacity:.3;margin:0 2px">·</span>
-      <span class="hctx-kbd">1-6</span> tabs
+      <span class="hctx-kbd">1-9</span> tabs
     </span>
   </div>
 </header>
@@ -1859,6 +2062,27 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
     <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0;margin-top:1px"><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm.93-9.412-1 4.705c-.07.34.029.533.304.533.194 0 .487-.07.686-.246l-.088.416c-.287.346-.92.598-1.465.598-.703 0-1.002-.422-.808-1.319l.738-3.468c.064-.293.006-.399-.287-.47l-.451-.081.082-.381 2.29-.287zM8 5.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>
     <span><strong>Open directly</strong> in browser or via <code>python3 -m http.server 8080</code>. All GCS fetches use the CORS-safe JSON API — no proxy needed.</span>
   </div>
+</div>
+
+
+<!-- Job Browser: discover recent IBM Z executions from public GCS -->
+<div class="job-browser" id="jobBrowser">
+  <h3>
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zm8 0A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zm-8 8A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zm8 0A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3z"/></svg>
+    Discover IBM Z Job Executions
+    <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10.5px" onclick="loadJobBrowser(true)">Refresh</button>
+  </h3>
+  <div class="jb-filters">
+    <button type="button" class="active" data-arch="z-z" onclick="setJbArch(this,'z-z')">Multi-arch z-z</button>
+    <button type="button" data-arch="z-za" onclick="setJbArch(this,'z-za')">Multi-arch z-za</button>
+    <button type="button" data-arch="s390x" onclick="setJbArch(this,'s390x')">Single-arch s390x</button>
+    <button type="button" data-arch="all" onclick="setJbArch(this,'all')">All</button>
+    <input id="jbFilter" type="text" placeholder="Filter by job name…" oninput="renderJobBrowserList()">
+  </div>
+  <div class="jb-list" id="jbList">
+    <div class="jb-status">Click Refresh to load recent executions from public GCS (test-platform-results-public).</div>
+  </div>
+  <div class="jb-status" id="jbStatus"></div>
 </div>
 
 <!-- Recent Analyses -->
@@ -1913,10 +2137,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 
 <!-- Results -->
 <div id="results">
-  <div class="tabs">
+  <div class="tabs" id="mainTabs">
     <div class="tab active" onclick="showTab('overview')">Overview</div>
+    <div class="tab" onclick="showTab('investigate')">Investigate</div>
     <div class="tab" onclick="showTab('steps')">Steps &amp; Logs</div>
+    <div class="tab" onclick="showTab('artifacts')">Artifacts</div>
     <div class="tab" onclick="showTab('timeline')">Timeline</div>
+    <div class="tab" onclick="showTab('config')">Config</div>
     <div class="tab" onclick="showTab('env')">Environment</div>
     <div class="tab" onclick="showTab('debug')">Debug Guide</div>
     <div class="tab" onclick="showTab('prowlog')">CI Operator Log</div>
@@ -1929,7 +2156,53 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
     <div class="meta-grid" id="metaGrid"></div>
     <div class="summary-bar" id="summaryBar"></div>
     <div id="rootCard"></div>
+    <div id="overviewNav"></div>
     <div id="phases"></div>
+  </div>
+
+
+  <div class="tab-content" id="tab-investigate">
+    <div class="inv-panel" id="investigatePanel">
+      <div class="artx-empty">Analyze a job to open the investigation workbench.</div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-artifacts">
+    <div class="section-card">
+      <h2>Artifact Explorer
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10.5px" onclick="refreshArtifactExplorer()">Reload</button>
+      </h2>
+      <p style="font-size:12px;color:var(--muted);margin:0 0 12px;line-height:1.55">
+        Browse execution artifacts from public GCS. Relevant failure evidence is highlighted.
+        Paths resolve through the CORS-safe GCS JSON API and gcsweb mirrors — never invented.
+      </p>
+      <div class="artx-toolbar">
+        <input id="artxFilter" type="text" placeholder="Filter by name…" oninput="filterArtifactExplorer()">
+        <select id="artxGroup" onchange="renderArtifactExplorer()">
+          <option value="all">All artifacts</option>
+          <option value="relevant">Relevant to failure</option>
+          <option value="logs">Logs only</option>
+          <option value="reports">Reports / junit</option>
+        </select>
+      </div>
+      <div class="artx-crumb" id="artxCrumb"></div>
+      <div id="artxBody"><div class="artx-empty">Analyze a job to explore its artifacts.</div></div>
+      <div class="artx-preview" id="artxPreview" style="display:none"></div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="tab-config">
+    <div class="section-card">
+      <h2>Configuration &amp; Workflow Correlation</h2>
+      <p style="font-size:12px;color:var(--muted);margin:0 0 14px;line-height:1.55">
+        Connects this execution to OpenShift CI configuration in
+        <a href="https://github.com/openshift/release" target="_blank">openshift/release</a>
+        and the reusable step registry. Configured workflow ≠ observed execution.
+      </p>
+      <div class="cfg-grid" id="configPanel">
+        <div class="artx-empty">Analyze a job to correlate configuration.</div>
+      </div>
+    </div>
   </div>
 
   <div class="tab-content" id="tab-steps">
@@ -2364,7 +2637,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
               <span class="wf-dval">
                 Runs <code>oc adm must-gather</code> against the cluster, which collects all cluster operator
                 states, pod logs, events, node descriptions, network configs, and storage states into a single
-                tar archive (<code>must-gather.tar</code>). This is the primary debugging artifact for
+                tar archive (<code>must-gather.tar.gz</code>). This is the primary debugging artifact for
                 understanding cluster-level failures.
               </span>
               <span class="wf-dlbl">Why it exists</span>
@@ -2603,6 +2876,14 @@ const PHASE_META = {
   post: { label:'POST — Gather & Cleanup',           icon:'🧹' },
 };
 
+
+// Steps that are best_effort / optional — failures here are usually secondary
+const BEST_EFFORT_STEPS = new Set([
+  'gather-must-gather','gather-extra','gather-audit-logs',
+  'ipi-conf-debug-kdump-gather-logs',
+  'upi-libvirt-cleanup-post','upi-libvirt-cleanup-heterogeneous-post',
+]);
+
 // ── Failure pattern → hint mapping ──────────────────────────────
 const FAIL_PATTERNS = [
   // Infrastructure / lease
@@ -2755,7 +3036,7 @@ const STEP_INFO = {
       { t:'<strong>Stale volume</strong> "exists already" → prior cleanup-post failed. See pre-cleanup log.', cls:'warn' },
       { t:'Cluster name truncation warning (>21 chars) is cosmetic — not a failure cause.', cls:'info' },
     ],
-    keyFiles: ['upi-install-libvirt/build-log.txt','upi-install-libvirt/.openshift_install.log'],
+    keyFiles: ['upi-install-libvirt-heterogeneous/build-log.txt','upi-install-libvirt-heterogeneous/.openshift_install.log'],
   },
   'openshift-e2e-libvirt-conf': {
     desc: 'Validates cluster health, sets TEST_PROVIDER, configures kubeconfig before tests.',
@@ -2783,9 +3064,9 @@ const STEP_INFO = {
     desc: 'Runs oc adm must-gather (best_effort, optional_on_success).',
     hints: [
       { t:'If must-gather <strong>FAILED</strong>: cluster too unhealthy for oc adm must-gather → severe cluster issue.', cls:'warn' },
-      { t:'Download <code>must-gather.tar</code> for full cluster state: operator logs, events, resource dumps.', cls:'info' },
+      { t:'Download <code>must-gather.tar.gz</code> for full cluster state: operator logs, events, resource dumps.', cls:'info' },
     ],
-    keyFiles: ['gather-must-gather/build-log.txt','must-gather.tar'],
+    keyFiles: ['gather-must-gather/build-log.txt','gather-must-gather/must-gather.tar.gz','gather-must-gather/camgi.html','gather-must-gather/event-filter.html'],
   },
   'gather-extra': {
     desc: 'Collects CI-specific artifacts: node status, ClusterOperator health, pod logs (best_effort).',
@@ -2973,8 +3254,7 @@ async function analyzeJob() {
     document.getElementById('copyBtn').style.display = 'inline-flex';
     // Push job URL to hash for bookmarking/sharing
     try {
-      const encoded = encodeURIComponent(raw);
-      history.replaceState(null, '', '#job=' + encoded);
+      updateHashState(raw, document.querySelector('.tab.active')?.getAttribute('onclick')?.match(/showTab\('([a-z]+)'\)/)?.[1] || 'overview');
     } catch {}
 
   } catch (e) {
@@ -3134,6 +3414,7 @@ function extractSnippet(log, patterns) {
 function buildAnalysis(ctx) {
   const { jobName, steps, finished, prowjob } = ctx;
   const meta = parseJobMeta(jobName);
+  enrichMetaFromProwjob(meta, prowjob);
 
   // Authoritative result: prefer finished.json, fall back to prowjob.json status
   const prowjobState = prowjob?.status?.state; // 'success' | 'failure' | 'pending' | 'triggered'
@@ -3157,7 +3438,10 @@ function buildAnalysis(ctx) {
     ...STEP_ORDER.filter(s => allStepNames.includes(s)),
     ...allStepNames.filter(s => !STEP_ORDER.includes(s)),
   ];
-  const firstFailed = orderedForFailure.find(s => steps[s]?.status === 'failed');
+  const failedSteps = orderedForFailure.filter(s => steps[s]?.status === 'failed');
+  // Prefer non-best_effort failure as primary; fall back to first failed
+  const firstFailed = failedSteps.find(s => !BEST_EFFORT_STEPS.has(s)) || failedSteps[0] || null;
+  const secondaryFailed = failedSteps.filter(s => s !== firstFailed);
 
   // Phase statuses
   const phaseStatus = {};
@@ -3171,7 +3455,278 @@ function buildAnalysis(ctx) {
                     : 'running';
   }
 
-  return { ...ctx, meta, result, counts, firstFailed, phaseStatus };
+  const diagnosis = buildDiagnosis({ ...ctx, meta, result, counts, firstFailed, secondaryFailed, phaseStatus, orderedForFailure });
+  const configLinks = buildConfigLinks({ jobName, meta, prowjob });
+
+  return { ...ctx, meta, result, counts, firstFailed, secondaryFailed, phaseStatus, diagnosis, configLinks, orderedForFailure };
+}
+
+/** Enrich parseJobMeta fields from prowjob.json labels when available (facts only). */
+function enrichMetaFromProwjob(meta, prowjob) {
+  if (!prowjob) return;
+  const labels = prowjob.metadata?.labels || {};
+  if (labels['ci-operator.openshift.io/cloud-cluster-profile']) {
+    meta.profile = labels['ci-operator.openshift.io/cloud-cluster-profile'];
+  }
+  if (labels['ci-operator.openshift.io/variant']) {
+    meta.variant = labels['ci-operator.openshift.io/variant'];
+  }
+  if (labels['job-release']) meta.jobRelease = labels['job-release'];
+  if (labels['prow.k8s.io/type']) meta.prowType = labels['prow.k8s.io/type'];
+  if (labels['prow.k8s.io/refs.org']) meta.refsOrg = labels['prow.k8s.io/refs.org'];
+  if (labels['prow.k8s.io/refs.repo']) meta.refsRepo = labels['prow.k8s.io/refs.repo'];
+  if (labels['prow.k8s.io/refs.base_ref']) meta.refsBranch = labels['prow.k8s.io/refs.base_ref'];
+  const refs = prowjob.spec?.extra_refs?.[0] || prowjob.spec?.refs;
+  if (refs?.org) meta.refsOrg = meta.refsOrg || refs.org;
+  if (refs?.repo) meta.refsRepo = meta.refsRepo || refs.repo;
+  if (refs?.base_ref) meta.refsBranch = meta.refsBranch || refs.base_ref;
+  // Prefer prowjob.spec.job for arch class when present
+  const job = prowjob.spec?.job || '';
+  if (/z-za/.test(job)) meta.archClass = 'multi-arch-heterogeneous';
+  else if (/z-z/.test(job)) meta.archClass = 'multi-arch-homogeneous';
+  else if (/remote-libvirt-s390x|(?:^|-)libvirt-s390x$/.test(job)) meta.archClass = 'single-arch-s390x';
+}
+
+/**
+ * Evidence-driven diagnosis. Distinguishes confirmed facts from hypotheses.
+ * Never invents causes — only surfaces patterns matched in logs + STEP_INFO hints.
+ */
+function buildDiagnosis(a) {
+  const d = {
+    summary: '',
+    facts: [],
+    hypotheses: [],
+    nextSteps: [],
+    evidence: [],
+    primaryStep: a.firstFailed || null,
+    secondarySteps: a.secondaryFailed || [],
+    confidence: 'none',
+  };
+
+  if (a.result === 'PASSED') {
+    d.summary = 'Job completed successfully. No failing step detected in finished.json / prowjob status.';
+    d.confidence = 'high';
+    d.facts.push('Overall result: PASSED');
+    d.facts.push(`${a.counts.passed} steps passed` + (a.counts.failed ? `, ${a.counts.failed} secondary/best-effort failures` : ''));
+    d.nextSteps.push({ label: 'Review Timeline for slow steps', action: "showTab('timeline')" });
+    d.nextSteps.push({ label: 'Browse artifacts', action: "showTab('artifacts')" });
+    return d;
+  }
+
+  if (a.result === 'RUNNING') {
+    d.summary = 'Job is still running — results are partial.';
+    d.confidence = 'low';
+    d.facts.push('Overall result: RUNNING (finished.json not terminal)');
+    const running = Object.entries(a.steps || {}).find(([,v]) => v.status === 'running');
+    if (running) d.facts.push(`Currently executing step: ${running[0]}`);
+    d.nextSteps.push({ label: 'Open CI Operator Log for live progress', action: "showTab('prowlog')" });
+    return d;
+  }
+
+  const ref = a.firstFailed;
+  if (!ref) {
+    d.summary = 'Job marked failed, but no failed step directory was found under artifacts/.';
+    d.confidence = 'low';
+    d.facts.push(`Overall result: ${a.result}`);
+    d.facts.push('No step with status=failed in discovered artifact directories');
+    d.nextSteps.push({ label: 'Inspect CI Operator Log', action: "showTab('prowlog')" });
+    d.nextSteps.push({ label: 'Browse raw GCS artifacts', action: "showTab('artifacts')" });
+    d.hypotheses.push({
+      tag: 'Hypothesis',
+      text: 'Failure may have occurred before multi-stage steps (lease/import) or artifacts were incomplete. Check root build-log.txt.',
+    });
+    return d;
+  }
+
+  const step = a.steps[ref] || {};
+  const info = STEP_INFO[ref] || {};
+  const pats = step.patterns || [];
+  const phase = Object.entries(PHASE_MAP).find(([,refs]) => refs.includes(ref));
+  const phaseLbl = phase ? PHASE_META[phase[0]].label : 'Unknown phase';
+  const isBestEffort = BEST_EFFORT_STEPS.has(ref);
+
+  d.summary = isBestEffort
+    ? `Primary observed failure is best-effort step ${ref} (${phaseLbl}). Treat as secondary unless install/test also failed.`
+    : `Primary failure signal: step ${ref} failed during ${phaseLbl}.`;
+  d.confidence = pats.length ? 'medium' : 'low';
+  d.facts.push(`First failing step (workflow order, non-best-effort preferred): ${ref}`);
+  d.facts.push(`Phase: ${phaseLbl}`);
+  if (step.duration != null) d.facts.push(`Step duration (inferred): ${fmtDur(step.duration)}`);
+  if (step.finJson?.passed === false) d.facts.push('Confirmed by step finished.json: passed=false');
+  if (isBestEffort) d.facts.push('This step is marked best_effort / optional_on_success in typical workflow config');
+  if ((a.secondaryFailed || []).length) {
+    d.facts.push(`Additional failed steps: ${a.secondaryFailed.join(', ')}`);
+  }
+
+  // Evidence links (real paths only)
+  d.evidence.push({
+    label: `${ref}/build-log.txt`,
+    url: `${a.artBase}/${ref}/build-log.txt`,
+    kind: 'log',
+    primary: true,
+    desc: 'Step execution log',
+  });
+  if (ref.includes('upi-install-libvirt')) {
+    d.evidence.push({
+      label: `${ref}/.openshift_install.log`,
+      url: `${a.artBase}/${ref}/.openshift_install.log`,
+      kind: 'log',
+      primary: true,
+      desc: 'Full openshift-install log — start here for install failures',
+    });
+  }
+  if (ref === 'openshift-e2e-libvirt-test') {
+    d.evidence.push({
+      label: `${ref}/artifacts/junit/`,
+      url: `${a.artBase}/${ref}/artifacts/junit/`,
+      kind: 'dir',
+      primary: true,
+      desc: 'JUnit XML test results',
+    });
+  }
+  // Always surface gather artifacts when present
+  for (const g of ['gather-extra', 'gather-must-gather', 'gather-audit-logs']) {
+    if (a.steps[g]) {
+      d.evidence.push({
+        label: `${g}/build-log.txt`,
+        url: `${a.artBase}/${g}/build-log.txt`,
+        kind: 'log',
+        primary: false,
+        desc: STEP_INFO[g]?.desc || 'Post-gather artifact',
+      });
+    }
+  }
+  if (a.steps['gather-must-gather']) {
+    d.evidence.push({
+      label: 'gather-must-gather/must-gather.tar.gz',
+      url: `${a.artBase}/gather-must-gather/must-gather.tar.gz`,
+      kind: 'archive',
+      primary: false,
+      desc: 'Must-gather archive (if produced)',
+    });
+  }
+
+  // Pattern-based hypotheses (clearly labeled — matched regexes in logs, not proven root cause)
+  for (const p of pats.slice(0, 4)) {
+    d.hypotheses.push({
+      tag: `Pattern: ${p.category}`,
+      text: p.hint, // trusted static HTML from FAIL_PATTERNS
+    });
+  }
+  if (!pats.length) {
+    d.hypotheses.push({
+      tag: 'Insufficient pattern evidence',
+      text: 'No known FAIL_PATTERNS matched this step log. Inspect the step log and related artifacts before concluding a cause.',
+    });
+  }
+
+  // Next investigation actions
+  d.nextSteps.push({ label: `Open ${ref} in Steps & Logs`, action: `showTab('steps');scrollToStep('${ref}')` });
+  d.nextSteps.push({ label: 'Browse Artifact Explorer (highlighted evidence)', action: "showTab('artifacts')" });
+  if (ref.includes('upi-install-libvirt')) {
+    d.nextSteps.push({ label: 'Read .openshift_install.log', action: `window.open('${a.artBase}/${ref}/.openshift_install.log','_blank')` });
+  }
+  if (a.steps['gather-extra']) {
+    d.nextSteps.push({ label: 'Check gather-extra cluster health summary', action: `showTab('steps');scrollToStep('gather-extra')` });
+  }
+  d.nextSteps.push({ label: 'Correlate with openshift/release config', action: "showTab('config')" });
+  d.nextSteps.push({ label: 'Open original Prow page', action: `window.open('${a.raw}','_blank')` });
+
+  // Static STEP_INFO hints as investigation guidance (domain KB, not live evidence)
+  for (const h of (info.hints || []).slice(0, 3)) {
+    d.nextSteps.push({ label: h.t.replace(/<[^>]+>/g, ''), action: null, kb: true });
+  }
+
+  return d;
+}
+
+/** Build config / step-registry / prow correlation links from available identifiers. */
+function buildConfigLinks({ jobName, meta, prowjob }) {
+  const org = meta.refsOrg || 'openshift';
+  const repo = meta.refsRepo || 'multiarch';
+  const branch = meta.refsBranch || 'main';
+  const variant = meta.variant || null;
+  const links = [];
+
+  // Job history & prow
+  links.push({
+    label: 'Prow job history',
+    url: `https://prow.ci.openshift.org/job-history/gs/test-platform-results-public/logs/${encodeURIComponent(jobName.replace(/^rehearse-\d+-/, ''))}`,
+    group: 'execution',
+  });
+  links.push({
+    label: 'Prow deck · *z-z',
+    url: 'https://prow.ci.openshift.org/?job=*z-z',
+    group: 'discovery',
+  });
+  links.push({
+    label: 'Prow deck · *s390x',
+    url: 'https://prow.ci.openshift.org/?job=*s390x',
+    group: 'discovery',
+  });
+
+  // Workflow / step registry (configured intent)
+  if (meta.workflow === 'openshift-e2e-libvirt-vpn') {
+    links.push({
+      label: 'Workflow: openshift-e2e-libvirt-vpn',
+      url: 'https://steps.ci.openshift.org/workflow/openshift-e2e-libvirt-vpn',
+      group: 'config',
+    });
+  } else {
+    links.push({
+      label: 'Workflow unresolved — open step registry',
+      url: 'https://steps.ci.openshift.org/',
+      group: 'config',
+      unresolved: true,
+    });
+  }
+  links.push({
+    label: 'Step registry (GitHub)',
+    url: 'https://github.com/openshift/release/tree/master/ci-operator/step-registry',
+    group: 'config',
+  });
+
+  // ci-operator config file (best-effort path reconstruction)
+  if (variant && org && repo) {
+    const cfgFile = `${org}-${repo}-${branch}__${variant}.yaml`;
+    const cfgPath = `ci-operator/config/${org}/${repo}/${cfgFile}`;
+    links.push({
+      label: `ci-operator config (${variant})`,
+      url: `https://github.com/openshift/release/blob/master/${cfgPath}`,
+      group: 'config',
+      resolved: true,
+    });
+    links.push({
+      label: 'ci-operator jobs (periodics)',
+      url: `https://github.com/openshift/release/blob/master/ci-operator/jobs/${org}/${repo}/${org}-${repo}-${branch}-periodics.yaml`,
+      group: 'config',
+      resolved: true,
+    });
+  } else {
+    links.push({
+      label: 'ci-operator config (unresolved)',
+      url: `https://github.com/openshift/release/tree/master/ci-operator/config/${org}/${repo}`,
+      group: 'config',
+      unresolved: true,
+    });
+  }
+
+  if (meta.profile) {
+    links.push({
+      label: `Cluster profile: ${meta.profile}`,
+      url: 'https://github.com/openshift/release/tree/master/core-services/prow/02_config',
+      group: 'config',
+    });
+  }
+
+  return {
+    org, repo, branch, variant,
+    workflow: meta.workflow || 'openshift-e2e-libvirt-vpn',
+    profile: meta.profile,
+    archClass: meta.archClass || null,
+    prowType: meta.prowType || null,
+    links,
+  };
 }
 
 /** Parse job name into metadata fields */
@@ -3193,7 +3748,13 @@ function parseJobMeta(jobName) {
                : /p-p/.test(jobName)  ? 'ppc64le homogeneous (p-p)' : 'unknown';
   m.arch = /p-p/.test(jobName) ? 'ppc64le' : 's390x';
   m.profile = /ppc64le|p-p/.test(jobName) ? 'libvirt-ppc64le-vpn' : 'libvirt-s390x-vpn';
-  m.workflow = 'openshift-e2e-libvirt-vpn';
+  // Only claim the libvirt-vpn workflow when the job name indicates it
+  m.workflow = /libvirt/.test(jobName) ? 'openshift-e2e-libvirt-vpn' : null;
+  m.archClass = /z-za/.test(jobName) ? 'multi-arch-heterogeneous'
+              : /z-z/.test(jobName)  ? 'multi-arch-homogeneous'
+              : /libvirt-s390x(?!-)|remote-libvirt-s390x/.test(jobName) || /libvirt-s390x$/.test(jobName)
+                ? 'single-arch-s390x'
+              : /s390x/.test(jobName) ? 's390x' : null;
   return m;
 }
 
@@ -3220,11 +3781,24 @@ function renderAll(a) {
   }
 
   renderFailureBanner(a); renderRunningIndicator(a);
-  renderMeta(a); renderSummary(a); renderRootCard(a);
-  renderPhases(a); renderStepsDetail(a); renderTimeline(a);
+  renderMeta(a); renderSummary(a);
+  // Diagnosis lives in Investigate; overview keeps a compact pointer + step chips
+  // (full phase trees remain on Steps & Logs — avoids duplicate step/log DOM)
+  renderRootCard(a);
+  renderOverviewNav(a);
+  document.getElementById('phases').innerHTML = '';
+  renderStepsDetail(a); renderTimeline(a);
   renderEnv(a); renderDebug(a); renderProwLog(a);
+  renderInvestigate(a);
+  renderConfigPanel(a);
+  // Artifact explorer loads async from GCS listing
+  initArtifactExplorer(a);
   // Async: fetch junit XML for the e2e test step (non-blocking)
   if (a.steps['openshift-e2e-libvirt-test'] && a.testSubdir) renderJunitPanel(a);
+  // Auto-open Investigate on failures
+  if (a.result === 'FAILED' && a.firstFailed) {
+    showTab('investigate');
+  }
 }
 
 // ── Failure banner ───────────────────────────────────────────────
@@ -3263,6 +3837,9 @@ function renderFailureBanner(a) {
         ${hasInstallLog ? `<a class="fb-btn secondary" href="${a.artBase}/${ref}/.openshift_install.log" target="_blank">
           ⚑ Install Log ↗
         </a>` : ''}
+        <button class="fb-btn" onclick="showTab('investigate')">
+          Open Investigate
+        </button>
         <button class="fb-btn secondary" onclick="showTab('steps');scrollToStep('${ref}')">
           View Step Detail
         </button>
@@ -3418,39 +3995,23 @@ function renderSummary(a) {
 
 function renderRootCard(a) {
   const el = document.getElementById('rootCard');
-  if (!a.firstFailed) { el.innerHTML = ''; return; }
+  // Full diagnosis moved to Investigate tab — keep a compact pointer only
+  if (!a.firstFailed || a.result === 'PASSED') { el.innerHTML = ''; return; }
   const ref = a.firstFailed;
-  const info = STEP_INFO[ref] || {};
-  const step = a.steps[ref];
-  const artUrl = `${a.artBase}/${ref}/build-log.txt`;
-  const phase = Object.entries(PHASE_MAP).find(([, refs]) => refs.includes(ref));
-  const phaseLbl = phase ? PHASE_META[phase[0]].label : 'Unknown Phase';
-  const pats = step?.patterns || [];
-
+  const pats = (a.steps[ref]?.patterns || []).slice(0, 3);
+  const conf = a.diagnosis?.confidence || 'low';
   el.innerHTML = `
-    <div class="root-card fade-in">
-      <h3><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M7.938 2.016A.13.13 0 0 1 8.002 2a.13.13 0 0 1 .063.016.146.146 0 0 1 .054.057l6.857 11.667c.036.06.035.124.002.183a.163.163 0 0 1-.054.06.116.116 0 0 1-.066.017H1.146a.115.115 0 0 1-.066-.017.163.163 0 0 1-.054-.06.176.176 0 0 1 .002-.183L7.884 2.073a.147.147 0 0 1 .054-.057zm1.044-.45a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg>
-        Root Cause — First Failing Step</h3>
-      <div class="root-step">${esc(ref)}</div>
-      <div class="root-phase">${phaseLbl}</div>
-      ${pats.length ? pats.map(p => `<div class="badge badge-fail" style="margin-bottom:6px;display:inline-block">${esc(p.category)}</div>`).join(' ') : ''}
-      ${step?.failureSnippet ? `<div class="snip-box">${colorizeLog(esc(step.failureSnippet))}</div>` : ''}
-      <div class="hints">
-        ${(info.hints || []).map((h, i) => `
-          <div class="hint-item ${h.cls || 'info'}">
-            <div class="hint-num">${i+1}</div>
-            <div>${h.t}</div>
-          </div>`).join('')}
-        ${pats.map(p => `
-          <div class="hint-item warn">
-            <div class="hint-num">!</div>
-            <div><strong>${esc(p.category)}:</strong> ${p.hint}</div>
-          </div>`).join('')}
-        <div class="hint-item info">
-          <div class="hint-num">→</div>
-          <div>📄 <a href="${artUrl}" target="_blank">${esc(ref)}/build-log.txt</a>
-          ${ref.includes('upi-install-libvirt') ? ` · <a href="${a.artBase}/${ref}/.openshift_install.log" target="_blank">.openshift_install.log ⚑</a>` : ''}</div>
-        </div>
+    <div class="root-card fade-in" style="padding:12px 16px">
+      <h3 style="margin-bottom:6px">Diagnosis ready</h3>
+      <div style="font-size:12.5px;color:var(--text2);line-height:1.55">
+        Primary signal: <code>${esc(ref)}</code>
+        ${pats.length ? ' · ' + pats.map(p => `<span class="badge badge-fail" style="font-size:9px">${esc(p.category)}</span>`).join(' ') : ''}
+        · confidence: <strong>${esc(conf)}</strong>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="fb-btn" onclick="showTab('investigate')">Open Investigate workbench</button>
+        <button class="fb-btn secondary" onclick="showTab('artifacts')">Artifact Explorer</button>
+        <button class="fb-btn secondary" onclick="showTab('config')">Config correlation</button>
       </div>
     </div>`;
 }
@@ -4961,12 +5522,462 @@ function filterProwLog(q) {
   _renderProwLogLines(filtered, el);
 }
 
+
+// ════════════════════════════════════════════════════════════════
+// WORKBENCH: Overview compact nav, Investigate, Artifacts, Config, Job Browser
+// ════════════════════════════════════════════════════════════════
+
+function renderOverviewNav(a) {
+  const el = document.getElementById('overviewNav');
+  if (!el) return;
+  const order = a.orderedForFailure || Object.keys(a.steps || {});
+  const failed = order.filter(r => a.steps[r]?.status === 'failed');
+  const chips = order.map(ref => {
+    const st = a.steps[ref]?.status || 'unknown';
+    return `<button type="button" class="ov-step-chip ${st}" title="${esc(ref)} (${st})"
+      onclick="showTab('steps');scrollToStep('${ref}')">${st === 'failed' ? '✗' : st === 'passed' ? '✓' : '·'} ${esc(ref)}</button>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="overview-nav">
+      <h3>Execution steps
+        ${failed.length ? `<span style="color:var(--red);font-weight:600;margin-left:8px">${failed.length} failed</span>` : ''}
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10.5px" onclick="showTab('investigate')">Open Investigate</button>
+      </h3>
+      <div>${chips || '<span style="color:var(--muted);font-size:12px">No steps discovered</span>'}</div>
+    </div>`;
+}
+
+function renderInvestigate(a) {
+  const el = document.getElementById('investigatePanel');
+  if (!el) return;
+  const d = a.diagnosis || buildDiagnosis(a);
+  const heroCls = a.result === 'PASSED' ? 'pass' : a.result === 'FAILED' ? 'fail' : 'run';
+  const confLabel = { high:'High confidence (status facts)', medium:'Medium (log patterns matched)', low:'Low (limited evidence)', none:'—' }[d.confidence] || d.confidence;
+
+  const factsHtml = d.facts.map(f => `<div class="inv-fact">• ${esc(f)}</div>`).join('');
+  const hypHtml = d.hypotheses.map(h => `
+    <div class="inv-hyp">
+      <div class="tag">${esc(h.tag)} — not proven causation</div>
+      <div>${typeof h.text === 'string' && h.text.includes('<') ? h.text : esc(h.text)}</div>
+    </div>`).join('');
+
+  const evHtml = (d.evidence || []).map(e => `
+    <div class="inv-ev-row ${e.primary ? 'primary' : ''}">
+      <span class="ev-label">${esc(e.label)}</span>
+      <span class="ev-meta">${esc(e.desc || e.kind)}</span>
+      <a href="${e.url}" target="_blank" rel="noopener">open ↗</a>
+      <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px"
+        onclick="previewArtifactUrl('${e.url.replace(/'/g, "\\'")}', '${esc(e.label)}')">Preview</button>
+    </div>`).join('') || '<div class="inv-fact" style="color:var(--muted)">No evidence links available.</div>';
+
+  const nextHtml = `<ul class="inv-next">${(d.nextSteps || []).map((n, i) => {
+    const body = n.action
+      ? `<a href="#" onclick="event.preventDefault();${n.action}">${n.kb ? n.label : esc(n.label)}</a>`
+      : (n.kb ? n.label : esc(n.label));
+    return `<li><span class="n">${i+1}</span><span>${body}</span></li>`;
+  }).join('')}</ul>`;
+
+  const secondary = (d.secondarySteps || []).length
+    ? `<div class="inv-sec-fail">Also failed (often downstream / best-effort): ${(d.secondarySteps).map(s => `<code>${esc(s)}</code>`).join(' ')}</div>`
+    : '';
+
+  el.innerHTML = `
+    <div class="inv-hero ${heroCls}">
+      <div>
+        <div class="inv-kicker">Failure investigation</div>
+        <div class="inv-title">${d.primaryStep ? esc(d.primaryStep) : esc(a.result)}</div>
+        <div class="inv-sub">${esc(d.summary)}</div>
+        <div class="inv-sub" style="margin-top:8px"><strong>Evidence confidence:</strong> ${esc(confLabel)}</div>
+        ${secondary}
+      </div>
+      <div class="inv-actions">
+        <button class="fb-btn" onclick="showTab('steps');${d.primaryStep ? `scrollToStep('${d.primaryStep}')` : ''}">Step detail</button>
+        <button class="fb-btn secondary" onclick="showTab('artifacts')">Artifacts</button>
+        <a class="fb-btn secondary" href="${a.raw}" target="_blank" rel="noopener">Prow ↗</a>
+      </div>
+    </div>
+    <div class="inv-grid">
+      <div class="inv-card">
+        <h3>Confirmed facts</h3>
+        ${factsHtml || '<div class="inv-fact" style="color:var(--muted)">No facts extracted.</div>'}
+      </div>
+      <div class="inv-card">
+        <h3>Pattern-based hypotheses</h3>
+        ${hypHtml || '<div class="inv-fact" style="color:var(--muted)">No pattern hypotheses.</div>'}
+      </div>
+      <div class="inv-card">
+        <h3>Evidence</h3>
+        <div class="inv-ev-list">${evHtml}</div>
+      </div>
+      <div class="inv-card">
+        <h3>What to inspect next</h3>
+        ${nextHtml}
+      </div>
+    </div>`;
+}
+
+function renderConfigPanel(a) {
+  const el = document.getElementById('configPanel');
+  if (!el) return;
+  const c = a.configLinks || buildConfigLinks(a);
+  const m = a.meta || {};
+  const executed = (a.orderedForFailure || Object.keys(a.steps || {})).filter(r => a.steps[r] && a.steps[r].status !== 'unknown');
+  const configured = STEP_ORDER.filter(s => !s.includes('heterogeneous') || /z-za|heterogeneous/.test(a.jobName || ''));
+
+  const linkGroups = { discovery: [], config: [], execution: [] };
+  for (const L of c.links || []) {
+    (linkGroups[L.group] || linkGroups.config).push(L);
+  }
+
+  const mkLinks = (arr) => `<div class="cfg-links">${arr.map(L =>
+    `<a href="${L.url}" target="_blank" rel="noopener">${esc(L.label)}${L.unresolved ? ' · unresolved' : ''} ↗</a>`
+  ).join('')}</div>`;
+
+  el.innerHTML = `
+    <div class="cfg-card">
+      <h3>Execution identity</h3>
+      <div class="cfg-row"><span class="ck">Job</span><span class="cv">${esc(a.jobName)}</span></div>
+      <div class="cfg-row"><span class="ck">Build ID</span><span class="cv">${esc(a.buildId)}</span></div>
+      <div class="cfg-row"><span class="ck">Result</span><span class="cv">${esc(a.result)}</span></div>
+      <div class="cfg-row"><span class="ck">Arch class</span><span class="cv">${esc(c.archClass || m.topology || '—')}</span></div>
+      <div class="cfg-row"><span class="ck">Prow type</span><span class="cv">${esc(c.prowType || '—')}</span></div>
+      <div class="cfg-row"><span class="ck">Test subdir</span><span class="cv">${esc(a.testSubdir || '—')}</span></div>
+      ${mkLinks(linkGroups.execution)}
+    </div>
+    <div class="cfg-card">
+      <h3>Configured workflow (intent)</h3>
+      <div class="cfg-row"><span class="ck">Workflow</span><span class="cv">${esc(c.workflow)}</span></div>
+      <div class="cfg-row"><span class="ck">Profile</span><span class="cv">${esc(c.profile || '—')}</span></div>
+      <div class="cfg-row"><span class="ck">Variant</span><span class="cv">${esc(c.variant || 'unresolved')}</span></div>
+      <div class="cfg-row"><span class="ck">Refs</span><span class="cv">${esc([c.org, c.repo, c.branch].filter(Boolean).join('/') || '—')}</span></div>
+      ${c.variant ? '' : '<div class="cfg-unresolved">Variant label missing from prowjob.json — config file path could not be fully resolved. Linked to the repo config directory instead.</div>'}
+      <div class="cfg-note">Configured steps describe intended workflow. Observed execution may skip optional/conditional steps.</div>
+      ${mkLinks(linkGroups.config)}
+    </div>
+    <div class="cfg-card">
+      <h3>Observed vs configured</h3>
+      <div class="cfg-row"><span class="ck">Configured (KB)</span><span class="cv">${configured.length} known workflow steps</span></div>
+      <div class="cfg-row"><span class="ck">Observed</span><span class="cv">${executed.length} step dirs with status</span></div>
+      <div class="cfg-row"><span class="ck">Failed</span><span class="cv">${(a.secondaryFailed||[]).length + (a.firstFailed?1:0)}</span></div>
+      <div class="cfg-note">Discovery sources:
+        <a href="https://prow.ci.openshift.org/?job=*z-z" target="_blank">*z-z</a> ·
+        <a href="https://prow.ci.openshift.org/?job=*s390x" target="_blank">*s390x</a> ·
+        <a href="https://github.com/openshift/release" target="_blank">openshift/release</a>
+      </div>
+      ${mkLinks(linkGroups.discovery)}
+    </div>`;
+}
+
+// ── Artifact explorer state ──────────────────────────────────────
+let _artxState = { prefix: '', items: [], dirs: [], analysis: null, loading: false };
+
+async function gcsListPrefix(bucket, prefix, { delimiter='/', maxResults=200 } = {}) {
+  const apiUrl = `https://storage.googleapis.com/storage/v1/b/${bucket}/o?` +
+    `prefix=${encodeURIComponent(prefix)}&delimiter=${encodeURIComponent(delimiter)}&maxResults=${maxResults}`;
+  return await fjs(apiUrl);
+}
+
+function initArtifactExplorer(a) {
+  _artxState.analysis = a;
+  const rootPrefix = a.gcsPath + '/artifacts/' + (a.testSubdir ? a.testSubdir + '/' : '');
+  _artxState.prefix = rootPrefix;
+  refreshArtifactExplorer();
+}
+
+async function refreshArtifactExplorer() {
+  const a = _artxState.analysis || _lastAnalysis;
+  if (!a) return;
+  _artxState.loading = true;
+  const body = document.getElementById('artxBody');
+  if (body) body.innerHTML = '<div class="artx-empty">Listing artifacts from GCS…</div>';
+  try {
+    const data = await gcsListPrefix(a.bucket, _artxState.prefix, { delimiter: '/', maxResults: 250 });
+    _artxState.dirs = (data?.prefixes || []).map(p => ({
+      name: p.replace(/\/$/, '').split('/').pop() + '/',
+      full: p,
+      isDir: true,
+    }));
+    _artxState.items = (data?.items || [])
+      .filter(it => it.name !== _artxState.prefix) // skip the prefix placeholder
+      .map(it => ({
+        name: it.name.slice(_artxState.prefix.length) || it.name.split('/').pop(),
+        full: it.name,
+        size: Number(it.size || 0),
+        contentType: it.contentType || '',
+        isDir: false,
+        updated: it.updated || null,
+      }))
+      .filter(it => it.name && !it.name.includes('/')); // files at this level only
+    renderArtifactExplorer();
+  } catch (e) {
+    if (body) body.innerHTML = `<div class="artx-empty">Failed to list artifacts: ${esc(e.message || String(e))}</div>`;
+  } finally {
+    _artxState.loading = false;
+  }
+}
+
+function artifactRelevance(name, a) {
+  if (!a?.firstFailed) return false;
+  const ref = a.firstFailed;
+  if (name.startsWith(ref) || name.includes(ref + '/') || name === ref + '/') return true;
+  if (ref.includes('upi-install') && name.includes('.openshift_install')) return true;
+  if (['gather-extra/', 'gather-must-gather/', 'gather-audit-logs/'].some(g => name.startsWith(g) || name === g)) return true;
+  return false;
+}
+
+function renderArtifactExplorer() {
+  const a = _artxState.analysis || _lastAnalysis;
+  const body = document.getElementById('artxBody');
+  const crumb = document.getElementById('artxCrumb');
+  if (!body || !a) return;
+
+  // Breadcrumb relative to artifacts root
+  const rootPrefix = a.gcsPath + '/artifacts/' + (a.testSubdir ? a.testSubdir + '/' : '');
+  const rel = _artxState.prefix.startsWith(rootPrefix) ? _artxState.prefix.slice(rootPrefix.length) : _artxState.prefix;
+  const parts = rel.split('/').filter(Boolean);
+  let acc = rootPrefix;
+  let crumbHtml = `<a onclick="artxNavigate('${rootPrefix.replace(/'/g,"\\'")}')">artifacts/${esc(a.testSubdir || '')}</a>`;
+  for (const p of parts) {
+    acc += p + '/';
+    crumbHtml += ` <span class="sep">/</span> <a onclick="artxNavigate('${acc.replace(/'/g,"\\'")}')">${esc(p)}</a>`;
+  }
+  if (crumb) crumb.innerHTML = crumbHtml;
+
+  const filter = (document.getElementById('artxFilter')?.value || '').toLowerCase();
+  const group = document.getElementById('artxGroup')?.value || 'all';
+
+  let rows = [..._artxState.dirs, ..._artxState.items];
+  rows = rows.filter(r => !filter || r.name.toLowerCase().includes(filter));
+  if (group === 'relevant') rows = rows.filter(r => artifactRelevance(r.name, a) || artifactRelevance(_artxState.prefix.split('/').pop() + '/' + r.name, a));
+  if (group === 'logs') rows = rows.filter(r => r.isDir || /\.(log|txt)$/i.test(r.name));
+  if (group === 'reports') rows = rows.filter(r => r.isDir || /\.(xml|html|json)$/i.test(r.name) || /junit/i.test(r.name));
+
+  // When at root, also pin known key evidence even if listing incomplete
+  const pinNote = a.firstFailed && _artxState.prefix === rootPrefix
+    ? `<div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">Primary failure step: <code>${esc(a.firstFailed)}</code> — open its directory for logs.</div>`
+    : '';
+
+  if (!rows.length) {
+    body.innerHTML = pinNote + '<div class="artx-empty">No artifacts at this path (or filter matched nothing).</div>';
+    return;
+  }
+
+  const gcsweb = (objPath) =>
+    `https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com/gcs/${a.bucket}/${objPath}`;
+  const gcsDirect = (objPath) =>
+    `https://storage.googleapis.com/${a.bucket}/${objPath}`;
+
+  body.innerHTML = pinNote + `
+    <table class="artx-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Size</th><th>Actions</th></tr></thead>
+      <tbody>
+        ${rows.map(r => {
+          const relevant = artifactRelevance(r.name, a);
+          const fullPath = r.isDir ? r.full : r.full;
+          const size = r.isDir ? '—' : fmtBytes(r.size);
+          const type = r.isDir ? 'dir' : (r.name.split('.').pop() || 'file');
+          const openDir = r.isDir
+            ? `<button class="btn btn-ghost btn-sm" style="font-size:10px" onclick="artxNavigate('${fullPath.replace(/'/g,"\\'")}')">Open</button>`
+            : `<a href="${gcsDirect(fullPath)}" target="_blank" rel="noopener">GCS ↗</a>
+               <a href="${gcsweb(fullPath)}" target="_blank" rel="noopener" style="margin-left:6px">browse ↗</a>
+               ${/\.(txt|log|json|xml|html|yaml|yml)$/i.test(r.name)
+                 ? `<button class="btn btn-ghost btn-sm" style="font-size:10px;margin-left:4px" onclick="previewArtifactUrl('${gcsDirect(fullPath).replace(/'/g,"\\'")}','${esc(r.name)}')">Preview</button>`
+                 : ''}`;
+          const nameCell = r.isDir
+            ? `<a href="#" onclick="event.preventDefault();artxNavigate('${fullPath.replace(/'/g,"\\'")}')">${esc(r.name)}</a>`
+            : `<a href="${gcsDirect(fullPath)}" target="_blank" rel="noopener">${esc(r.name)}</a>`;
+          return `<tr>
+            <td class="name">${nameCell}</td>
+            <td><span class="artx-badge ${relevant ? 'relevant' : (r.isDir ? 'step' : '')}">${relevant ? 'relevant · ' : ''}${type}</span></td>
+            <td style="color:var(--muted);font-variant-numeric:tabular-nums">${size}</td>
+            <td>${openDir}
+              <button class="btn btn-ghost btn-sm" style="font-size:10px;margin-left:4px" onclick="copyText('${(r.isDir?gcsweb(fullPath):gcsDirect(fullPath)).replace(/'/g,"\\'")}')">Copy URL</button>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+}
+
+function filterArtifactExplorer() { renderArtifactExplorer(); }
+
+function artxNavigate(prefix) {
+  _artxState.prefix = prefix.endsWith('/') ? prefix : prefix + '/';
+  document.getElementById('artxPreview').style.display = 'none';
+  refreshArtifactExplorer();
+}
+
+async function previewArtifactUrl(url, label) {
+  const box = document.getElementById('artxPreview');
+  if (!box) return;
+  box.style.display = 'block';
+  box.innerHTML = `<div style="padding:10px;color:var(--muted);font-size:12px">Loading ${esc(label)}…</div>`;
+  showTab('artifacts');
+  const text = await fts(url);
+  if (!text) {
+    box.innerHTML = `<div style="padding:12px;color:var(--red)">Could not load artifact (missing, redacted, or inaccessible).
+      <a href="${url}" target="_blank" rel="noopener">Try direct link ↗</a></div>`;
+    return;
+  }
+  if (text === '__REDACTED__') {
+    box.innerHTML = `<div style="padding:12px;color:var(--yellow)">Artifact redacted by Prow (sensitive content removed).</div>`;
+    return;
+  }
+  // Cap preview size for browser performance
+  const max = 200_000;
+  const clipped = text.length > max ? text.slice(0, max) + `\n\n… [truncated preview — ${text.length} bytes total; open full file for remainder]` : text;
+  box.innerHTML = `<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--muted);display:flex;justify-content:space-between">
+    <span>${esc(label)}</span>
+    <span><a href="${url}" target="_blank" rel="noopener">Open full ↗</a>
+    · <button class="btn btn-ghost btn-sm" style="font-size:10px" onclick="copyText(${JSON.stringify(url)})">Copy URL</button></span>
+  </div><pre>${esc(clipped)}</pre>`;
+}
+
+function fmtBytes(n) {
+  if (n == null || isNaN(n)) return '—';
+  if (n < 1024) return n + ' B';
+  if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+  return (n/(1024*1024)).toFixed(1) + ' MB';
+}
+
+function copyText(s) {
+  navigator.clipboard?.writeText(s).then(() => showToast('Copied')).catch(() => showToast('Copy failed'));
+}
+
+// ── Job browser (GCS-backed discovery for IBM Z jobs) ────────────
+const JB_CATALOG = {
+  // Curated from openshift/multiarch nightlies (libvirt IBM Z). Extended dynamically when possible.
+  'z-z': [
+    'periodic-ci-openshift-multiarch-main-nightly-5.1-ocp-e2e-serial-ovn-remote-libvirt-multi-z-z',
+    'periodic-ci-openshift-multiarch-main-nightly-5.1-ocp-e2e-ovn-remote-libvirt-multi-z-z',
+    'periodic-ci-openshift-multiarch-main-nightly-5.1-ocp-e2e-ovn-agent-remote-libvirt-multi-z-z',
+    'periodic-ci-openshift-multiarch-main-nightly-5.0-ocp-e2e-serial-ovn-remote-libvirt-multi-z-z',
+    'periodic-ci-openshift-multiarch-main-nightly-5.0-ocp-e2e-ovn-remote-libvirt-multi-z-z',
+    'periodic-ci-openshift-multiarch-main-nightly-5.0-upgrade-from-nightly-4.22-ocp-ovn-remote-libvirt-multi-z-z',
+    'periodic-ci-openshift-multiarch-main-nightly-4.23-ocp-fips-ovn-techpreview-multi-z-z',
+    'periodic-ci-openshift-multiarch-main-nightly-4.23-ocp-e2e-serial-ovn-remote-libvirt-multi-z-z',
+    'periodic-ci-openshift-multiarch-main-nightly-4.23-ocp-fips-ovn-remote-libvirt-multi-z-z',
+  ],
+  'z-za': [
+    'periodic-ci-openshift-multiarch-main-nightly-5.1-ocp-e2e-ovn-remote-libvirt-multi-z-za',
+    'periodic-ci-openshift-multiarch-main-nightly-5.0-ocp-e2e-ovn-remote-libvirt-multi-z-za',
+  ],
+  's390x': [
+    'periodic-ci-openshift-multiarch-main-nightly-5.1-ocp-e2e-ovn-remote-libvirt-s390x',
+    'periodic-ci-openshift-multiarch-main-nightly-5.0-ocp-e2e-ovn-remote-libvirt-s390x',
+    'periodic-ci-openshift-multiarch-main-nightly-4.23-ocp-e2e-ovn-remote-libvirt-s390x',
+  ],
+};
+const JB_BUCKET = 'test-platform-results-public';
+let _jbArch = 'z-z';
+let _jbRows = [];
+
+function setJbArch(btn, arch) {
+  _jbArch = arch;
+  document.querySelectorAll('.jb-filters button[data-arch]').forEach(b => b.classList.toggle('active', b === btn));
+  loadJobBrowser(false);
+}
+
+async function loadJobBrowser(force) {
+  const status = document.getElementById('jbStatus');
+  const list = document.getElementById('jbList');
+  if (list) list.innerHTML = '<div class="jb-status">Loading recent builds from GCS…</div>';
+  if (status) status.textContent = '';
+
+  const jobs = _jbArch === 'all'
+    ? [...JB_CATALOG['z-z'], ...JB_CATALOG['z-za'], ...JB_CATALOG['s390x']]
+    : (JB_CATALOG[_jbArch] || []);
+
+  const rows = [];
+  // Fetch latest ~3 builds per job (bounded concurrency)
+  const queue = [...jobs];
+  const workers = Array.from({ length: 4 }, async () => {
+    while (queue.length) {
+      const job = queue.shift();
+      try {
+        const data = await gcsListPrefix(JB_BUCKET, `logs/${job}/`, { delimiter: '/', maxResults: 8 });
+        const builds = (data?.prefixes || [])
+          .map(p => p.replace(/\/$/, '').split('/').pop())
+          .filter(id => /^\d+$/.test(id))
+          .sort((a, b) => (a < b ? 1 : -1)) // numeric string ids — lexicographic ok for snowflake ids
+          .slice(0, 3);
+        for (const buildId of builds) {
+          const fin = await fjs(`https://storage.googleapis.com/${JB_BUCKET}/logs/${job}/${buildId}/finished.json`);
+          const started = await fjs(`https://storage.googleapis.com/${JB_BUCKET}/logs/${job}/${buildId}/started.json`);
+          let res = 'run';
+          if (fin?.passed === true) res = 'pass';
+          else if (fin?.passed === false) res = 'fail';
+          const arch = /z-za/.test(job) ? 'z-za' : /z-z/.test(job) ? 'z-z' : /s390x/.test(job) ? 's390x' : '?';
+          rows.push({
+            job, buildId, res, arch,
+            ts: started?.timestamp || fin?.timestamp || null,
+            url: `https://prow.ci.openshift.org/view/gs/${JB_BUCKET}/logs/${job}/${buildId}`,
+          });
+        }
+      } catch { /* skip job */ }
+    }
+  });
+  await Promise.all(workers);
+  rows.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  _jbRows = rows;
+  renderJobBrowserList();
+  if (status) status.textContent = `${rows.length} recent executions · source: gs://${JB_BUCKET}/logs/ · deck filters: *z-z / *s390x`;
+}
+
+function renderJobBrowserList() {
+  const list = document.getElementById('jbList');
+  if (!list) return;
+  const q = (document.getElementById('jbFilter')?.value || '').toLowerCase();
+  const rows = _jbRows.filter(r => !q || r.job.toLowerCase().includes(q) || r.buildId.includes(q));
+  if (!_jbRows.length) {
+    list.innerHTML = '<div class="jb-status">No rows yet — click Refresh. If empty after load, GCS listing may be rate-limited; paste a Prow URL instead.</div>';
+    return;
+  }
+  if (!rows.length) {
+    list.innerHTML = '<div class="jb-status">No executions match this filter.</div>';
+    return;
+  }
+  list.innerHTML = rows.map(r => {
+    const when = r.ts ? timeAgo(r.ts * 1000) : '—';
+    const short = r.job.replace(/^periodic-ci-openshift-multiarch-main-nightly-/, '…/');
+    return `<div class="jb-row" onclick="selectBrowserJob('${r.url.replace(/'/g,"\\'")}')" title="${esc(r.job)}">
+      <span class="res ${r.res}">${r.res === 'pass' ? 'PASS' : r.res === 'fail' ? 'FAIL' : 'RUN'}</span>
+      <span class="jname">${esc(short)}</span>
+      <span class="arch">${esc(r.arch)}</span>
+      <span class="meta">${esc(r.buildId.slice(-8))} · ${esc(when)}</span>
+    </div>`;
+  }).join('');
+}
+
+function selectBrowserJob(url) {
+  const inp = document.getElementById('jobUrl');
+  if (inp) { inp.value = url; validateUrl(url); }
+  analyzeJob();
+}
+
+function updateHashState(jobUrl, tabId) {
+  try {
+    const parts = [];
+    if (jobUrl) parts.push('job=' + encodeURIComponent(jobUrl));
+    if (tabId) parts.push('tab=' + tabId);
+    history.replaceState(null, '', parts.length ? '#' + parts.join('&') : location.pathname);
+  } catch {}
+}
+
+
 function showTab(id) {
-  const ids = ['overview','steps','timeline','env','debug','prowlog'];
-  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ids[i]===id));
+  const ids = ['overview','investigate','steps','artifacts','timeline','config','env','debug','prowlog'];
+  document.querySelectorAll('#mainTabs .tab, .tabs .tab').forEach((t,i) => {
+    const tabIds = ids;
+    // Prefer matching by onclick target rather than index if mismatch
+    const onclick = t.getAttribute('onclick') || '';
+    const m = onclick.match(/showTab\('([a-z]+)'\)/);
+    const tid = m ? m[1] : tabIds[i];
+    t.classList.toggle('active', tid === id);
+  });
   document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id==='tab-'+id));
-  // Persist active tab in URL hash for shareability
-  try { history.replaceState(null, '', '#tab=' + id); } catch {}
+  const jobUrl = document.getElementById('jobUrl')?.value || (_lastAnalysis?.raw) || '';
+  updateHashState(jobUrl, id);
 }
 /** Expand detail panels for all failed steps currently visible in the Steps tab */
 function expandAllFailed() {
@@ -5098,7 +6109,7 @@ document.addEventListener('keydown', e => {
   }
   if (!inInput) {
     // Tab shortcuts: 1-6 switch tabs
-    const TAB_KEYS = { '1':'overview','2':'steps','3':'timeline','4':'env','5':'debug','6':'prowlog' };
+    const TAB_KEYS = { '1':'overview','2':'investigate','3':'steps','4':'artifacts','5':'timeline','6':'config','7':'env','8':'debug','9':'prowlog' };
     if (TAB_KEYS[e.key] && document.getElementById('results')?.style.display !== 'none') {
       e.preventDefault();
       showTab(TAB_KEYS[e.key]);

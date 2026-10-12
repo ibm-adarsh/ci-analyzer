@@ -2,7 +2,7 @@
 
 > **Live demo → [https://ibm-adarsh.github.io/ci-analyzer](https://ibm-adarsh.github.io/ci-analyzer)**
 
-A single-file, zero-dependency browser tool that fetches live GCS artifact data from [prow.ci.openshift.org](https://prow.ci.openshift.org) jobs and gives a deep, step-by-step failure analysis for **IBM Z homogeneous (z-z)** and **heterogeneous (z-za)** jobs running the `openshift-e2e-libvirt-vpn` workflow.
+A single-file, zero-dependency browser **debugging workbench** that fetches live GCS artifact data from [prow.ci.openshift.org](https://prow.ci.openshift.org) jobs and correlates them with OpenShift CI configuration for **IBM Z homogeneous (z-z)**, **heterogeneous (z-za)**, and **single-arch s390x** jobs running the `openshift-e2e-libvirt-vpn` workflow.
 
 ---
 
@@ -10,21 +10,25 @@ A single-file, zero-dependency browser tool that fetches live GCS artifact data 
 
 | Tab | What you get |
 |-----|--------------|
-| **Overview** | LPAR lease card (slot, hypervisor URI, DNS svc, zone), nightly release tag, job metadata, step execution summary, failure banner with root-cause hints |
-| **Steps & Logs** | Every step grouped by PRE / TEST / POST phase with status badge, duration, last 80 log lines, error pattern detection, direct GCS artifact links |
-| **Timeline** | Gantt-style chart of all step durations |
-| **Environment** | Live env vars parsed from `build-log.txt` bash traces + expandable knowledge-base cards (what each var does & how to debug it) |
-| **Debug Guide** | Full `openshift-e2e-libvirt-vpn` workflow reference with per-step cards + dynamic Job Status Checklist |
-| **CI Operator Log** | Raw ci-operator `build-log.txt` with colour coding — lease acquisition line highlighted in purple, release import in blue, failures in red; regex filter |
+| **Overview** | Compact job health, LPAR lease, metadata, step chips |
+| **Investigate** | Unified failure workbench — facts vs hypotheses, evidence, next steps |
+| **Steps & Logs** | PRE / TEST / POST steps with status, duration, log search, GCS links |
+| **Artifacts** | GCS artifact explorer with relevance highlighting + text preview |
+| **Timeline** | Gantt-style chart of step durations |
+| **Config** | Links to `openshift/release` ci-operator config, jobs, step-registry, Prow decks |
+| **Environment** | Live env vars from bash traces + knowledge-base cards |
+| **Debug Guide** | Full workflow reference + Job Status Checklist |
+| **CI Operator Log** | Root `build-log.txt` with colour coding and regex filter |
 
 ### Key capabilities
-- 🔑 **Exact lease slot** — extracted from the ci-operator root log (`Acquired 1 lease(s) for ...: [libvirt-s390x-0-1]`), not guessed from step logs
-- 🏷️ **Nightly build tag** — `5.0.0-0.nightly-multi-2026-10-02-094431` shown in metadata
-- 🖥️ **Full LPAR resolution** — slot `libvirt-s390x-0-1` → LPAR `lnxocp01`, `qemu+tcp://lnxocp01:16509/system`, DNS svc `sshd-0.bastion-z.svc.cluster.local`, Orange Zone
-- ✅ **Self-test engine** — validates GCS reachability, lease extraction, and first-failure detection against real job URLs
-- 🌙 **Dark / light theme**
-- 📋 **Copy summary** to clipboard
-- 🕘 **Recent jobs** history (localStorage)
+- 🧭 **Job browser** — discover recent `*z-z`, `*z-za`, and `*s390x` executions from public GCS
+- 🎯 **Evidence-driven diagnosis** — primary vs best-effort secondary failures; hypotheses clearly labeled
+- 📦 **Artifact explorer** — browse real GCS prefixes; no invented paths
+- 🔗 **Config correlation** — variant/profile from `prowjob.json` → GitHub config + [steps.ci.openshift.org](https://steps.ci.openshift.org/workflow/openshift-e2e-libvirt-vpn)
+- 🔑 **Exact lease slot** — from ci-operator root log, with LPAR resolution
+- ✅ **Self-test engine** — live GCS regression checks
+- 🌙 **Dark / light theme** · 📋 **Copy summary** · 🕘 **Recent jobs** (localStorage)
+- Shareable `#job=…&tab=…` deep links
 
 ---
 
@@ -137,6 +141,10 @@ POST:
 - **Step discovery** is fully dynamic via GCS directory listing — no hardcoded step names
 - **Duration inference** — `finished.json` has no `start_time`; durations are computed as `step_end_ts − prev_step_end_ts`
 - **Lease extraction** — parsed from root ci-operator `build-log.txt` (`Acquired 1 lease(s) for ...: [slot]`), with step log fallback
+- **Primary failure** — first failed step in workflow order, preferring non-`best_effort` steps
+- **Config correlation** — uses `prowjob.json` labels (`ci-operator.openshift.io/variant`, cluster profile, refs) to build GitHub links; marks unresolved when labels are missing
+- **Job browser** — lists recent builds for a curated catalog of IBM Z job names under `gs://test-platform-results-public/logs/`
+- **Headless check** — `node verify-workbench.mjs` (or the Python GCS checks in CI notes) validates representative success/failure/z-z/z-za/s390x cases against live public artifacts
 
 ---
 

@@ -80,12 +80,17 @@ https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/
 
 | Tab | Content |
 |-----|---------|
-| **Overview** | LPAR lease card (slot, hypervisor URI, DNS service, zone), nightly release tag, job metadata, step execution summary, failure banner with root-cause hints |
-| **Steps & Logs** | Every step grouped by PRE / TEST / POST phase — status badge, duration, last 80 log lines, error pattern detection, direct GCS links |
+| **Overview** | Compact job health, LPAR lease, metadata, step chips — entry point for investigation |
+| **Investigate** | Unified failure workbench: confirmed facts, pattern hypotheses (labeled), evidence links, next steps |
+| **Steps & Logs** | Every step grouped by PRE / TEST / POST — status, duration, log search, GCS links |
+| **Artifacts** | Searchable GCS artifact explorer with relevance highlighting and in-browser text preview |
 | **Timeline** | Gantt-style chart of all step durations |
-| **Environment** | Live env vars parsed from `build-log.txt` bash traces + expandable knowledge-base cards |
-| **Debug Guide** | Full `openshift-e2e-libvirt-vpn` workflow reference with per-step cards and a dynamic Job Status Checklist |
-| **CI Operator Log** | Raw ci-operator `build-log.txt` with colour-coded lease, release import, and failure lines; regex filter |
+| **Config** | Correlates execution with `openshift/release` ci-operator config, jobs, and step-registry |
+| **Environment** | Live env vars parsed from `build-log.txt` bash traces + knowledge-base cards |
+| **Debug Guide** | Full `openshift-e2e-libvirt-vpn` workflow reference + Job Status Checklist |
+| **CI Operator Log** | Root ci-operator `build-log.txt` with colour coding and regex filter |
+
+Also includes a **job browser** for recent multi-arch `z-z` / `z-za` and single-arch `s390x` executions discovered from public GCS.
 
 ---
 
