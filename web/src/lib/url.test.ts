@@ -55,12 +55,20 @@ describe('meta classification', () => {
 
   it('maps cluster profile / workflow from job name heuristics', () => {
     expect(parseJobMeta('…libvirt-multi-z-z').profile).toBe('libvirt-s390x-vpn');
-    expect(parseJobMeta('…libvirt-multi-z-za').profile).toBe('libvirt-s390x-amd64');
+    expect(parseJobMeta('…libvirt-multi-z-za').profile).toBe('libvirt-s390x-vpn-arm64');
+    expect(parseJobMeta('…libvirt-multi-z-xz').profile).toBe('libvirt-s390x-amd64');
     expect(parseJobMeta('…libvirt-multi-z-za').workflow).toBe(
       'openshift-e2e-libvirt-upi-heterogeneous',
     );
     expect(parseJobMeta('…fips…libvirt-multi-z-z').workflow).toBe(
       'openshift-e2e-libvirt-vpn-fips',
+    );
+    expect(parseJobMeta('…ocp-image-ecosystem…libvirt-multi-z-z').testType).toBe(
+      'image-ecosystem',
+    );
+    expect(parseJobMeta('…agent-remote-libvirt-multi-z-z').testType).toBe('agent-based');
+    expect(parseJobMeta('…upgrade-from-nightly-4.14-ocp-ovn-remote-libvirt-s390x').fromVersion).toBe(
+      '4.14',
     );
   });
 });

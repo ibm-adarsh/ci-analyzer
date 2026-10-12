@@ -32,12 +32,19 @@ function stripAnsi(t) {
 async function fetchText(url) {
   const r = await fetch(url);
   if (!r.ok) return null;
-  return r.text();
+  const t = await r.text();
+  // Match web/src/lib/gcs.ts redaction handling.
+  if (t && t.length < 400 && /potentially sensitive information.*removed/i.test(t)) {
+    return '__REDACTED__';
+  }
+  return t;
 }
 
 async function expectFromGcs(parsed) {
   const base = `https://storage.googleapis.com/${parsed.bucket}/${parsed.gcsPath}`;
-  const prowLog = stripAnsi((await fetchText(`${base}/build-log.txt`)) || '');
+  const rawProwLog = await fetchText(`${base}/build-log.txt`);
+  const prowLogRedacted = rawProwLog === '__REDACTED__';
+  const prowLog = prowLogRedacted ? '' : stripAnsi(rawProwLog || '');
   const prowjob = JSON.parse((await fetchText(`${base}/prowjob.json`)) || '{}');
   const finished = JSON.parse((await fetchText(`${base}/finished.json`)) || '{}');
   const prowState = prowjob?.status?.state || null;
@@ -62,7 +69,8 @@ async function expectFromGcs(parsed) {
     imported.find((m) => m[3] === 's390x-initial') ||
     imported.find((m) => m[3] === 'multi-initial');
   // Only Imported … to tag release:*initial* counts (Resolved initial appears on non-upgrades).
-  const initialTag = initialImported?.[1] || null;
+  let initialTag = initialImported?.[1] || null;
+  let releaseTag = latest?.[1] || null;
 
   const listUrl = `https://storage.googleapis.com/storage/v1/b/${parsed.bucket}/o?prefix=${encodeURIComponent(parsed.gcsPath + '/artifacts/')}&delimiter=/`;
   const list = await (await fetch(listUrl)).json();
@@ -78,13 +86,14 @@ async function expectFromGcs(parsed) {
 
   let qemu = null;
   let failedSteps = [];
+  let leaseFromSteps = null;
   if (sub) {
     const stepsUrl = `https://storage.googleapis.com/storage/v1/b/${parsed.bucket}/o?prefix=${encodeURIComponent(`${parsed.gcsPath}/artifacts/${sub}/`)}&delimiter=/`;
     const stepsList = await (await fetch(stepsUrl)).json();
     const stepNames = (stepsList.prefixes || []).map((p) => p.replace(/\/$/, '').split('/').pop());
     for (const s of stepNames) {
       const fin = await fetchText(`${base}/artifacts/${sub}/${s}/finished.json`);
-      if (!fin) continue;
+      if (!fin || fin === '__REDACTED__') continue;
       try {
         const j = JSON.parse(fin);
         if (j.passed === false) failedSteps.push(s);
@@ -104,26 +113,67 @@ async function expectFromGcs(parsed) {
       ...stepNames,
     ]) {
       const log = await fetchText(`${base}/artifacts/${sub}/${s}/build-log.txt`);
-      if (!log) continue;
-      const m = stripAnsi(log).match(/Using libvirt connection for (qemu\+tcp:\/\/\S+)/i);
-      if (m) {
-        qemu = m[1];
-        break;
+      if (!log || log === '__REDACTED__') continue;
+      const text = stripAnsi(log);
+      if (!leaseFromSteps) {
+        const env = text.match(/LEASED_RESOURCE[=:\s]+(['"]?)(libvirt-s390x[a-z0-9-]*)\1/i);
+        const bare = text.match(/\b(libvirt-s390x(?:-oz|-arm64)?-\d+-\d+)\b/);
+        if (env) leaseFromSteps = env[2];
+        else if (bare) leaseFromSteps = bare[1];
+      }
+      if (!qemu) {
+        const m = text.match(/Using libvirt connection for (qemu\+tcp:\/\/\S+)/i);
+        if (m) qemu = m[1];
+      }
+      if (leaseFromSteps && qemu) break;
+    }
+  }
+
+  // When ci-operator build-log is redacted, recover release tags from ImageStreams.
+  if (!releaseTag || (!initialTag && /upgrade-from-nightly/i.test(parsed.jobName))) {
+    const art = `${base}/artifacts/release/artifacts`;
+    const latestNames = [
+      'release-images-latest',
+      'release-images-s390x-latest',
+      'release-images-multi-latest',
+    ];
+    const initialNames = [
+      'release-images-initial',
+      'release-images-s390x-initial',
+      'release-images-multi-initial',
+    ];
+    if (!releaseTag) {
+      for (const name of latestNames) {
+        const js = JSON.parse((await fetchText(`${art}/${name}`)) || 'null');
+        if (js?.metadata?.name) {
+          releaseTag = js.metadata.name;
+          break;
+        }
+      }
+    }
+    if (!initialTag) {
+      for (const name of initialNames) {
+        const js = JSON.parse((await fetchText(`${art}/${name}`)) || 'null');
+        if (js?.metadata?.name) {
+          initialTag = js.metadata.name;
+          break;
+        }
       }
     }
   }
 
   return {
     finishedPassed: finished.passed,
-    leaseSlot: leaseM?.[2] || null,
+    leaseSlot: leaseM?.[2] || leaseFromSteps || null,
     leasePool: leaseM?.[1] || null,
     profile: labelProfile || profileM?.[1] || null,
-    releaseTag: latest?.[1] || null,
+    releaseTag,
     initialTag,
     qemu,
     failedSteps,
     testSubdir: sub,
     prowState,
+    prowLogRedacted,
     wantResult:
       finished.passed === false || prowState === 'failure' || prowState === 'error'
         ? 'FAILED'
@@ -167,12 +217,30 @@ for (const url of JOBS) {
     check('result', analysis.result, expected.wantResult);
   }
   check('lease slot', analysis.leaseSlot, expected.leaseSlot);
-  check('lease pool', analysis.lease?.pool ?? null, expected.leasePool);
+  // Pool comes only from root build-log Acquired line — soft when log redacted.
+  check(
+    'lease pool',
+    analysis.lease?.pool ?? null,
+    expected.leasePool,
+    expected.prowLogRedacted && !expected.leasePool,
+  );
   // Heuristic profile is OK when prowjob/log never recorded one (infra error before load).
   check('cluster profile', analysis.meta.profile, expected.profile, !expected.profile);
   check('release tag', analysis.release?.tag ?? null, expected.releaseTag, !expected.releaseTag);
   if (expected.initialTag) {
     check('upgrade initial tag', analysis.release?.initialTag ?? null, expected.initialTag);
+  } else if (/upgrade-from-nightly/i.test(parsed.jobName)) {
+    // Upgrade jobs should surface an initial tag from log or release-images-*-initial.
+    if (!analysis.release?.initialTag) {
+      errors.push('upgrade initial tag missing on upgrade job');
+    } else {
+      checks.push({
+        label: 'upgrade initial tag present',
+        actual: analysis.release.initialTag,
+        want: 'non-null',
+        pass: true,
+      });
+    }
   }
   check('test subdir', analysis.testSubdir, expected.testSubdir);
   check('qemu URI', analysis.lease?.qemuUri ?? null, expected.qemu, true);

@@ -10,20 +10,29 @@ export function parseJobMeta(jobName: string): JobMeta {
   const fromVersion = upgradeM ? upgradeM[1] : null;
   const testType = fromVersion
     ? 'upgrade'
-    : jobName.includes('serial')
-      ? 'conformance-serial'
-      : 'conformance-parallel';
+    : jobName.includes('image-ecosystem')
+      ? 'image-ecosystem'
+      : jobName.includes('serial')
+        ? 'conformance-serial'
+        : jobName.includes('agent')
+          ? 'agent-based'
+          : 'conformance-parallel';
   const topology = /z-za/.test(jobName)
     ? 'IBM Z heterogeneous (z-za)'
-    : /z-z/.test(jobName)
-      ? 'IBM Z homogeneous (z-z)'
-      : /p-p/.test(jobName)
-        ? 'ppc64le homogeneous (p-p)'
-        : 'unknown';
+    : /z-xz/.test(jobName)
+      ? 'IBM Z heterogeneous (z-xz)'
+      : /z-z/.test(jobName)
+        ? 'IBM Z homogeneous (z-z)'
+        : /p-p/.test(jobName)
+          ? 'ppc64le homogeneous (p-p)'
+          : /external-ibmz/.test(jobName)
+            ? 'IBM Z external platform'
+            : 'unknown';
   const arch = /p-p/.test(jobName) ? 'ppc64le' : 's390x';
   let profile = 'libvirt-s390x-vpn';
   if (/ppc64le|p-p/.test(jobName)) profile = 'libvirt-ppc64le-s2s';
-  else if (/z-za|z-xz|heterogeneous/.test(jobName)) profile = 'libvirt-s390x-amd64';
+  else if (/z-za/.test(jobName)) profile = 'libvirt-s390x-vpn-arm64';
+  else if (/z-xz|heterogeneous/.test(jobName)) profile = 'libvirt-s390x-amd64';
   else if (/libvirt-s390x-vpn-arm64|remote-libvirt.*arm64|vpn-arm64/.test(jobName))
     profile = 'libvirt-s390x-vpn-arm64';
 
@@ -33,6 +42,8 @@ export function parseJobMeta(jobName: string): JobMeta {
       workflow = 'openshift-e2e-libvirt-upi-heterogeneous';
     } else if (/fips/.test(jobName)) {
       workflow = 'openshift-e2e-libvirt-vpn-fips';
+    } else if (/external-ibmz-upi/.test(jobName)) {
+      workflow = 'openshift-e2e-libvirt-upi';
     } else {
       workflow = 'openshift-e2e-libvirt-vpn';
     }

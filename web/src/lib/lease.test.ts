@@ -6,7 +6,7 @@ import {
   parseLibvirtConnectionFromSteps,
 } from './lease';
 import { resolveLpar } from './lparResolve';
-import { parseReleaseFromProwLog } from './release';
+import { mergeReleaseInfo, parseReleaseFromProwLog } from './release';
 
 const SAMPLE_PROW = `
 INFO[2026-10-06T13:03:52Z] Imported release 4.22.0-0.nightly-multi-2026-10-05-071148 created at 2026-10-05 08:06:01 +0000 UTC with 191 images to tag release:initial
@@ -60,6 +60,21 @@ Resolved release latest to registry.ci.openshift.org/ocp/release:4.14.0-0.nightl
     const rel = parseReleaseFromProwLog(log);
     expect(rel?.tag).toBe('4.14.0-0.nightly-2026-09-30-024514');
     expect(rel?.initialTag).toBe('4.13.0-0.nightly-s390x-2024-11-20-091923');
+  });
+
+  it('merges artifact initialTag when log has target but no upgrade-from', () => {
+    const fromLog = parseReleaseFromProwLog(`
+Imported release 4.15.0-0.nightly-2026-09-15-112245 created at 2026-09-15 with 187 images to tag release:latest
+`);
+    const merged = mergeReleaseInfo(fromLog, {
+      tag: '4.15.0-0.nightly-2026-09-15-112245',
+      createdAt: null,
+      pullSpec: null,
+      initialTag: '4.14.0-0.nightly-s390x-2026-10-08-100525',
+      source: 'artifacts/release/artifacts/release-images-s390x-initial',
+    });
+    expect(merged?.tag).toBe('4.15.0-0.nightly-2026-09-15-112245');
+    expect(merged?.initialTag).toBe('4.14.0-0.nightly-s390x-2026-10-08-100525');
   });
 
   it('ignores Resolved release initial on non-upgrade jobs (no Imported *-initial)', () => {

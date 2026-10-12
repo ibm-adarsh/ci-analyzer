@@ -12,6 +12,7 @@ import {
 } from './meta';
 import {
   fetchReleaseFromArtifacts,
+  mergeReleaseInfo,
   parseReleaseFromProwLog,
   type ReleaseInfo,
 } from './release';
@@ -338,9 +339,19 @@ export async function analyzeExecution(
   const steps = await fetchAllSteps(artBase, bucket, gcsPath, testSubdir, started);
 
   onProgress?.(70, 'Resolving release / lease…');
-  let release = parseReleaseFromProwLog(prowLog);
-  if (!release?.tag) {
-    release = (await fetchReleaseFromArtifacts(base)) || release;
+  const releaseFromLog = parseReleaseFromProwLog(prowLog);
+  // Always consult artifacts: recovers tags when build-log is redacted, and
+  // fills upgrade-from (release-images-*-initial) when the log omitted it.
+  const releaseFromArts = await fetchReleaseFromArtifacts(base);
+  let release = mergeReleaseInfo(releaseFromLog, releaseFromArts);
+  // ImageStream *-initial can exist on non-upgrades; only keep it for upgrade jobs
+  // or when the ci-operator log explicitly imported release:*initial*.
+  if (
+    release?.initialTag &&
+    !releaseFromLog?.initialTag &&
+    !/upgrade-from-nightly/i.test(jobName)
+  ) {
+    release = { ...release, initialTag: null };
   }
   const lease = extractLeaseInfo(prowLog, steps);
   const leaseSlot = lease?.slot || null;

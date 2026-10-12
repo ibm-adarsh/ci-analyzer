@@ -11,8 +11,34 @@ export interface ReleaseInfo {
   initialTag?: string | null;
 }
 
+type ImageStreamJson = {
+  metadata?: { name?: string; creationTimestamp?: string };
+  status?: {
+    publicDockerImageRepository?: string;
+    tags?: { tag?: string; items?: { dockerImageReference?: string }[] }[];
+  };
+  spec?: { tags?: { name?: string; from?: { name?: string } }[] };
+};
+
 function stripAnsi(text: string): string {
   return text.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+function imageStreamSummary(js: ImageStreamJson, source: string): ReleaseInfo {
+  const tag = js.metadata?.name || null;
+  const testsTag =
+    js.spec?.tags?.find((t) => t.name === 'tests')?.from?.name ||
+    js.status?.tags?.find((t) => t.tag === 'tests')?.items?.[0]?.dockerImageReference ||
+    null;
+  return {
+    tag,
+    createdAt: js.metadata?.creationTimestamp || null,
+    pullSpec: testsTag,
+    installTarget:
+      js.spec?.tags?.find((t) => t.name === 'machine-os-images' || t.name === 'installer')?.from
+        ?.name || null,
+    source,
+  };
 }
 
 /**
@@ -92,48 +118,71 @@ export function parseLeaseFromProwLog(prowLog: string | null): string | null {
   return m?.[1]?.trim() || null;
 }
 
+async function readImageStream(url: string): Promise<ReleaseInfo | null> {
+  const js = await fetchJson<ImageStreamJson>(url);
+  if (!js?.metadata?.name) return null;
+  const short = url.includes('release-images-')
+    ? `artifacts/release/artifacts/${url.split('/').pop()}`
+    : 'artifacts/release ImageStream';
+  return imageStreamSummary(js, short);
+}
+
 /**
- * Fallback when root build-log is missing (common while job is still running):
+ * Fallback when root build-log is missing/redacted:
  * read ImageStream JSON written under artifacts/release/.
+ * Also recovers upgrade-from tags from release-images-*-initial.
  */
 export async function fetchReleaseFromArtifacts(
   base: string,
 ): Promise<ReleaseInfo | null> {
-  const candidates = [
-    `${base}/artifacts/release/artifacts/release-images-latest`,
-    `${base}/artifacts/release/artifacts/release-images-initial`,
+  const art = `${base}/artifacts/release/artifacts`;
+  const latestUrls = [
+    `${art}/release-images-latest`,
+    `${art}/release-images-s390x-latest`,
+    `${art}/release-images-multi-latest`,
   ];
-  for (const url of candidates) {
-    const js = await fetchJson<{
-      metadata?: { name?: string; creationTimestamp?: string };
-      status?: {
-        publicDockerImageRepository?: string;
-        tags?: { tag?: string; items?: { dockerImageReference?: string }[] }[];
-      };
-      spec?: { tags?: { name?: string; from?: { name?: string } }[] };
-    }>(url);
-    if (!js?.metadata?.name) continue;
-    const tag = js.metadata.name;
-    const testsTag =
-      js.spec?.tags?.find((t) => t.name === 'tests')?.from?.name ||
-      js.status?.tags?.find((t) => t.tag === 'tests')?.items?.[0]?.dockerImageReference ||
-      null;
+  const initialUrls = [
+    `${art}/release-images-initial`,
+    `${art}/release-images-s390x-initial`,
+    `${art}/release-images-multi-initial`,
+  ];
+
+  let latest: ReleaseInfo | null = null;
+  for (const url of latestUrls) {
+    latest = await readImageStream(url);
+    if (latest?.tag) break;
+  }
+
+  let initialTag: string | null = null;
+  for (const url of initialUrls) {
+    const init = await readImageStream(url);
+    if (init?.tag) {
+      initialTag = init.tag;
+      break;
+    }
+  }
+
+  if (latest?.tag) {
     return {
-      tag,
-      createdAt: js.metadata.creationTimestamp || null,
-      pullSpec: testsTag,
-      installTarget:
-        js.spec?.tags?.find((t) => t.name === 'machine-os-images' || t.name === 'installer')?.from
-          ?.name || null,
-      source: url.includes('release-images-latest')
-        ? 'artifacts/release/artifacts/release-images-latest'
-        : 'artifacts/release ImageStream',
+      ...latest,
+      initialTag,
+      source: initialTag ? `${latest.source} (+ initial ImageStream)` : latest.source,
     };
   }
 
+  // Only an initial stream (unusual) — still surface it as the build tag.
+  if (initialTag) {
+    for (const url of initialUrls) {
+      const init = await readImageStream(url);
+      if (init?.tag) {
+        return { ...init, initialTag: null, source: init.source };
+      }
+    }
+  }
+
   const textCandidates = [
-    `${base}/artifacts/release/artifacts/release-images-latest-pull-spec`,
-    `${base}/artifacts/release/artifacts/release.txt`,
+    `${art}/release-images-latest-pull-spec`,
+    `${art}/release.txt`,
   ];
   for (const url of textCandidates) {
     const t = await fetchText(url);
@@ -143,11 +192,35 @@ export async function fetchReleaseFromArtifacts(
         tag,
         createdAt: null,
         pullSpec: t.trim().split('\n')[0],
+        initialTag,
         source: url.split('/artifacts/')[1] || url,
       };
     }
   }
   return null;
+}
+
+/** Merge log-parsed release with artifact ImageStreams (fills gaps either way). */
+export function mergeReleaseInfo(
+  fromLog: ReleaseInfo | null,
+  fromArts: ReleaseInfo | null,
+): ReleaseInfo | null {
+  if (!fromLog && !fromArts) return null;
+  if (!fromLog) return fromArts;
+  if (!fromArts) return fromLog;
+  return {
+    tag: fromLog.tag || fromArts.tag,
+    createdAt: fromLog.createdAt || fromArts.createdAt,
+    pullSpec: fromLog.pullSpec || fromArts.pullSpec,
+    installTarget: fromLog.installTarget || fromArts.installTarget,
+    initialTag: fromLog.initialTag || fromArts.initialTag || null,
+    source:
+      fromLog.tag && fromArts.initialTag && !fromLog.initialTag
+        ? `${fromLog.source} + ${fromArts.source}`
+        : fromLog.tag
+          ? fromLog.source
+          : fromArts.source,
+  };
 }
 
 /** Quay / browser-friendly link for a release tag when it looks like a nightly. */
