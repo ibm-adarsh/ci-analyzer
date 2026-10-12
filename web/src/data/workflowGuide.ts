@@ -13,11 +13,24 @@ export interface GuideStep {
   ocpStage: string;
   summary: string;
   detail: string;
+  /** First places a developer should look when this step fails */
+  whenFails?: string;
   bestEffort?: boolean;
   via?: string;
   stepsCi?: string;
   releaseYaml?: string;
   keyArtifacts?: string[];
+}
+
+export interface DebugPlaybookItem {
+  title: string;
+  detail: string;
+}
+
+export interface EditPathInfo {
+  change: string;
+  path: string;
+  url: string;
 }
 
 export interface GuideWorkflow {
@@ -77,6 +90,8 @@ const VPN_LEAF_STEPS: GuideStep[] = [
     summary: 'Destroy leftover VMs, networks, and volumes for this Boskos lease before a new install.',
     detail:
       'Looks up the libvirt daemon from the leased slot (via cluster-profile lease map) and cleans resources whose names embed the lease. Prevents “storage volume already exists” from a previous failed cleanup-post.',
+    whenFails:
+      'Check qemu+tcp host in the log, then virsh list/vol-list on that LPAR. Stale domains from a failed cleanup-post are the usual cause.',
     stepsCi: stepCi('ref', 'upi-libvirt-cleanup-pre'),
     releaseYaml: refUrl('upi/libvirt/cleanup/pre/upi-libvirt-cleanup-pre-ref.yaml'),
     keyArtifacts: ['build-log.txt'],
@@ -99,6 +114,8 @@ const VPN_LEAF_STEPS: GuideStep[] = [
     summary: 'Write network.xml for the libvirt virtual network into $SHARED_DIR.',
     detail:
       'Mirrors the “define cluster network / DNS” part of UPI. USE_EXTERNAL_DNS=true (typical for VPN Z jobs) points the cluster at LPAR/external DNS instead of in-cluster CoreDNS only. INSTALLER_TYPE=agent changes layout for agent-based install.',
+    whenFails:
+      'Confirm LEASED_RESOURCE and lease secret fields (bridge/vxlan). Hetero/z-za often fails later if additional-bridge is missing.',
     via: 'upi-conf-libvirt',
     stepsCi: stepCi('ref', 'upi-conf-libvirt-network'),
     releaseYaml: refUrl('upi/conf/libvirt/network/upi-conf-libvirt-network-ref.yaml'),
@@ -122,6 +139,8 @@ const VPN_LEAF_STEPS: GuideStep[] = [
     summary: 'Generate install-config.yaml (platform none/external, FIPS, feature set, node counts).',
     detail:
       'Equivalent to authoring install-config before `openshift-install create cluster`. Sets ARCH, CONTROL_COUNT/COMPUTE_COUNT, FIPS_ENABLED, FEATURE_SET (TechPreviewNoUpgrade), PLATFORM_TYPE/NAME for external-platform jobs, NODE_TUNING, USE_EXTERNAL_DNS.',
+    whenFails:
+      'Diff job env against a green sibling nightly. Bad FEATURE_SET / FIPS / PLATFORM_* values show up here before install starts.',
     via: 'upi-conf-libvirt',
     stepsCi: stepCi('ref', 'upi-conf-libvirt'),
     releaseYaml: refUrl('upi/conf/libvirt/upi-conf-libvirt-ref.yaml'),
@@ -156,6 +175,8 @@ const VPN_LEAF_STEPS: GuideStep[] = [
     summary: 'Put etcd on ramfs when disk is classified slow (IBM Z default).',
     detail:
       'Paired with ETCD_DISK_SPEED=slow in multiarch job env. Avoids etcd leader elections caused by high disk latency on Z LPAR storage. Do not use ramfs for upgrade paths that reboot masters (ramfs is lost).',
+    whenFails:
+      'On upgrade jobs that reboot masters, ramfs etcd is a known footgun — check whether ETCD_DISK_SPEED/USE_RAMFS should be off for that lane.',
     stepsCi: stepCi('ref', 'ipi-conf-etcd-on-ramfs'),
     releaseYaml: refUrl('ipi/conf/etcd/on-ramfs/ipi-conf-etcd-on-ramfs-ref.yaml'),
   },
@@ -166,6 +187,8 @@ const VPN_LEAF_STEPS: GuideStep[] = [
     summary: 'Create the libvirt network on the remote Z hypervisor via virsh.',
     detail:
       'Connects over qemu+tcp through the VPN/bastion using the leased hostname. Consumes $SHARED_DIR/network.xml from the conf step.',
+    whenFails:
+      'VPN/bastion DNS or virsh connectivity. For *-heterogeneous-network, missing vxlan."additional-bridge" in the lease secret is a common hard fail.',
     via: 'upi-install-libvirt',
     stepsCi: stepCi('ref', 'upi-install-libvirt-network'),
     releaseYaml: refUrl('upi/install/libvirt/network/upi-install-libvirt-network-ref.yaml'),
@@ -187,6 +210,8 @@ const VPN_LEAF_STEPS: GuideStep[] = [
     summary: 'Create VMs, run openshift-install, wait for bootstrap-complete and install-complete.',
     detail:
       'The core of UPI on libvirt: virt-install/virsh define+start, then openshift-install create cluster (or agent path). Maps to the documented install phases: create manifests/ignition (earlier), bootstrap, approve CSRs, wait for cluster operators. Primary evidence: .openshift_install.log.',
+    whenFails:
+      'Open .openshift_install.log first (not only build-log). Bootstrap timeout, CSR approval, and “volume already exists” dominate Z failures.',
     via: 'upi-install-libvirt',
     stepsCi: stepCi('ref', 'upi-install-libvirt'),
     releaseYaml: refUrl('upi/install/libvirt/upi-install-libvirt-ref.yaml'),
@@ -199,6 +224,8 @@ const VPN_LEAF_STEPS: GuideStep[] = [
     summary: 'Validate kubeconfig / provider settings and inject test include/exclude lists.',
     detail:
       'Confirms the cluster is reachable after install and prepares openshift-tests (TEST_TYPE, ARCH, BRANCH). Failure here usually means install looked green but API/network is unhealthy.',
+    whenFails:
+      'Install may have reported success while API/DNS is unhealthy — check gather-extra / must-gather and kube-apiserver reachability.',
     via: 'openshift-e2e-libvirt-test',
     stepsCi: stepCi('ref', 'openshift-e2e-libvirt-conf'),
     releaseYaml: refUrl('openshift/e2e/libvirt/conf/openshift-e2e-libvirt-conf-ref.yaml'),
@@ -210,6 +237,8 @@ const VPN_LEAF_STEPS: GuideStep[] = [
     summary: 'Run openshift-tests (conformance-parallel, serial, upgrade, image-ecosystem, …).',
     detail:
       'Product validation after a successful install. TEST_TYPE selects suite behaviour. JUnit + e2e.log are the source of truth for which tests failed.',
+    whenFails:
+      'Start with junit*.xml + e2e.log. Correlate flake vs product bug; check EXTENSION_BINARY_OVERRIDE_EXCLUDE_TAGS on 5.x.',
     via: 'openshift-e2e-libvirt-test',
     stepsCi: stepCi('ref', 'openshift-e2e-libvirt-test'),
     releaseYaml: refUrl('openshift/e2e/libvirt/test/openshift-e2e-libvirt-test-ref.yaml'),
@@ -263,6 +292,8 @@ const VPN_LEAF_STEPS: GuideStep[] = [
     summary: 'Destroy VMs/networks/volumes for the lease so the next job can reuse the slot.',
     detail:
       'If this fails, Boskos may still release the lease but virsh state remains — the next job then fails in cleanup-pre/install with stale volumes.',
+    whenFails:
+      'Treat as infra debt: next job on the same lease often fails with stale volumes. Manually virsh-destroy/undefine if the pool is wedged.',
     stepsCi: stepCi('ref', 'upi-libvirt-cleanup-post'),
     releaseYaml: refUrl('upi/libvirt/cleanup/post/upi-libvirt-cleanup-post-ref.yaml'),
   },
@@ -326,49 +357,107 @@ export const GUIDE_WORKFLOWS: GuideWorkflow[] = [
   {
     id: 'hetero',
     name: 'openshift-e2e-libvirt-upi-heterogeneous',
-    title: 'Heterogeneous libvirt (z-xz)',
+    title: 'Heterogeneous libvirt (z-xz / z-za)',
     summary:
-      'Multi-arch compute path (s390x control plane + additional amd64 workers). Uses heterogeneous pre/install/post chains and profile libvirt-s390x-amd64.',
+      'Mixed-arch path: s390x control plane plus additional workers (amd64 z-xz, or arm64 z-za). Leaf dirs under GCS often use *-heterogeneous-* names; this debugger aliases them onto the VPN leaf names.',
     since: '4.15+',
-    profiles: ['libvirt-s390x-amd64'],
+    profiles: ['libvirt-s390x-amd64', 'libvirt-s390x-vpn-arm64'],
     stepsCi: stepCi('workflow', 'openshift-e2e-libvirt-upi-heterogeneous'),
     releaseYaml: `${RELEASE}/ci-operator/step-registry/openshift/e2e/libvirt/upi/heterogeneous/openshift-e2e-libvirt-upi-heterogeneous-workflow.yaml`,
     steps: [
       {
-        name: 'upi-libvirt-conf / heterogeneous-pre',
+        name: 'upi-libvirt-cleanup-heterogeneous-pre',
         phase: 'pre',
-        ocpStage: 'Install prep + homogeneous install chain',
-        summary: 'Configure and install the primary (s390x) cluster via heterogeneous-pre chain.',
+        ocpStage: 'Pre-flight · reclaim primary + additional hosts',
+        summary: 'Clean stale domains/networks/volumes on primary and additional hypervisors for the lease.',
         detail:
-          'Chain upi-libvirt-heterogeneous-pre expands to conf, etcd-on-ramfs, and upi-libvirt-install for the base cluster.',
-        via: 'upi-libvirt-heterogeneous-pre',
-        stepsCi: stepCi('chain', 'upi-libvirt-heterogeneous-pre'),
+          'Heterogeneous cleanup walks both LPARs. Alias of upi-libvirt-cleanup-pre in the debugger UI.',
+        whenFails:
+          'Confirm both hosts are reachable. Partial cleanup leaves the next install with stale volumes.',
+        stepsCi: stepCi('ref', 'upi-libvirt-cleanup-heterogeneous-pre'),
+        keyArtifacts: ['build-log.txt'],
       },
       {
-        name: 'upi-libvirt-install-heterogeneous',
+        name: 'upi-conf-libvirt-heterogeneous-network',
         phase: 'pre',
-        ocpStage: 'Add multi-arch compute workers',
-        summary: 'Attach additional-architecture workers (amd64) to the s390x control plane.',
+        ocpStage: 'Install prep · dual-host network manifests',
+        summary: 'Write network config for primary + additional-arch bridge/VXLAN.',
         detail:
-          'ADDITIONAL_WORKER_ARCHITECTURE drives the mixed-arch topology behind job names like multi-z-xz.',
-        stepsCi: stepCi('ref', 'upi-libvirt-install-heterogeneous'),
+          'Needs lease fields for both hypervisors. Missing vxlan."additional-bridge" fails later at install-network.',
+        whenFails: 'Inspect the Boskos lease secret for the arm64/amd64 additional host fields.',
+        stepsCi: stepCi('ref', 'upi-conf-libvirt-heterogeneous-network'),
+        keyArtifacts: ['build-log.txt'],
+      },
+      {
+        name: 'upi-conf-libvirt-heterogeneous',
+        phase: 'pre',
+        ocpStage: 'Install prep · install-config (mixed-arch)',
+        summary: 'Generate install-config for s390x control plane + additional workers.',
+        detail: 'ADDITIONAL_WORKER_ARCHITECTURE / counts drive z-xz vs z-za topology.',
+        stepsCi: stepCi('ref', 'upi-conf-libvirt-heterogeneous'),
+        keyArtifacts: ['build-log.txt'],
+      },
+      {
+        name: 'upi-install-libvirt-heterogeneous-network',
+        phase: 'pre',
+        ocpStage: 'Infrastructure · create networks on both hosts',
+        summary: 'Create libvirt networks on primary and additional hypervisors.',
+        detail:
+          'Hard-fails with ERROR: Couldn\'t find \'vxlan."additional-bridge"\' when the lease secret is incomplete (seen on libvirt-s390x-arm64-* slots).',
+        whenFails:
+          'Fix the lease config for additional-bridge / VXLAN, or pick a known-good arm64/amd64 lease slot.',
+        stepsCi: stepCi('ref', 'upi-install-libvirt-heterogeneous-network'),
+        keyArtifacts: ['build-log.txt'],
+      },
+      {
+        name: 'upi-install-libvirt-heterogeneous',
+        phase: 'pre',
+        ocpStage: 'openshift-install · base + additional workers',
+        summary: 'Install the s390x cluster, then attach additional-architecture workers.',
+        detail:
+          'Two-stage infra: primary install then mixed-arch workers. Primary evidence still .openshift_install.log.',
+        whenFails: 'Open .openshift_install.log; confirm additional workers joined and CSRs approved.',
+        stepsCi: stepCi('ref', 'upi-install-libvirt-heterogeneous'),
         keyArtifacts: ['build-log.txt', '.openshift_install.log'],
       },
       {
-        name: 'openshift-e2e-libvirt-conf → test',
+        name: 'openshift-e2e-libvirt-conf',
         phase: 'test',
-        ocpStage: 'Conformance on mixed-arch cluster',
-        summary: 'Same openshift-e2e-libvirt-test chain as homogeneous jobs.',
-        detail: 'Validates the heterogeneous cluster with conformance-parallel (typical).',
-        via: 'openshift-e2e-libvirt-test',
+        ocpStage: 'Post-install · cluster ready for tests',
+        summary: 'Validate kubeconfig / provider settings before openshift-tests.',
+        detail: 'Same conf leaf as homogeneous VPN jobs.',
+        stepsCi: stepCi('ref', 'openshift-e2e-libvirt-conf'),
       },
       {
-        name: 'upi-libvirt-heterogeneous-post',
+        name: 'openshift-e2e-libvirt-test',
+        phase: 'test',
+        ocpStage: 'Conformance on mixed-arch cluster',
+        summary: 'Run openshift-tests against the heterogeneous cluster.',
+        detail: 'JUnit + e2e.log remain the source of truth.',
+        whenFails: 'Check whether failures are arch-specific (workers) vs control-plane.',
+        stepsCi: stepCi('ref', 'openshift-e2e-libvirt-test'),
+        keyArtifacts: ['build-log.txt', 'junit*.xml', 'e2e.log'],
+      },
+      {
+        name: 'gather-must-gather',
         phase: 'post',
-        ocpStage: 'Gather + deprovision',
-        summary: 'Gather artifacts and tear down heterogeneous libvirt resources.',
-        detail: 'Post chain specific to mixed-arch leases/volumes.',
-        via: 'upi-libvirt-heterogeneous-post',
+        ocpStage: 'Debug · oc adm must-gather',
+        summary: 'Standard must-gather (best-effort).',
+        detail:
+          'Same gather leaf as homogeneous jobs. Prefer gather-extra if the mixed-arch cluster is too unhealthy for oc adm must-gather.',
+        bestEffort: true,
+        stepsCi: stepCi('ref', 'gather-must-gather'),
+        keyArtifacts: ['must-gather.tar.gz'],
+      },
+      {
+        name: 'upi-libvirt-cleanup-heterogeneous-post',
+        phase: 'post',
+        ocpStage: 'Deprovision · both hypervisors',
+        summary: 'Tear down domains/networks/volumes on primary and additional hosts.',
+        detail: 'Failed post-cleanup poisons the next z-xz / z-za job on the same lease.',
+        whenFails: 'Manual virsh cleanup on both LPARs if the slot keeps failing pre-cleanup.',
+        stepsCi: stepCi('ref', 'upi-libvirt-cleanup-heterogeneous-post'),
+        keyArtifacts: ['build-log.txt'],
       },
     ],
   },
@@ -421,6 +510,16 @@ export const CLUSTER_PROFILES: ClusterProfileInfo[] = [
       'Used with openshift-e2e-libvirt-upi-heterogeneous. Often enables USE_RAMFS=true and sshd-bastion capability.',
     connectivity: 'Libvirt across arches; bastion/sshd for cross-arch access.',
     typicalJobs: ['ocp-e2e-ovn-remote-libvirt-multi-z-xz'],
+    status: 'specialized',
+  },
+  {
+    id: 'libvirt-s390x-vpn-arm64',
+    title: 'libvirt-s390x-vpn-arm64',
+    summary: 'Heterogeneous topology: s390x + arm64 workers (z-za jobs).',
+    usage:
+      'Leases look like libvirt-s390x-arm64-*-*. Requires vxlan."additional-bridge" in the lease secret for the additional hypervisor.',
+    connectivity: 'Primary Z LPAR + additional arm64 libvirt host over VPN/bastion.',
+    typicalJobs: ['ocp-e2e-ovn-remote-libvirt-multi-z-za'],
     status: 'specialized',
   },
   {
@@ -557,8 +656,13 @@ export const JOB_PATTERNS: JobPatternInfo[] = [
   },
   {
     pattern: 'multi-z-xz',
-    meaning: 'Heterogeneous: Z control plane + x86 workers.',
+    meaning: 'Heterogeneous: Z control plane + x86 (amd64) workers.',
     example: 'ocp-e2e-ovn-remote-libvirt-multi-z-xz',
+  },
+  {
+    pattern: 'multi-z-za',
+    meaning: 'Heterogeneous: Z control plane + arm64 workers (libvirt-s390x-arm64 leases).',
+    example: 'ocp-e2e-ovn-remote-libvirt-multi-z-za',
   },
   {
     pattern: 'remote-libvirt-s390x',
@@ -668,6 +772,64 @@ export const CI_LAYERS: { name: string; blurb: string }[] = [
   },
 ];
 
+/** Ordered checklist when a developer opens a failed Z libvirt job. */
+export const DEBUG_PLAYBOOK: DebugPlaybookItem[] = [
+  {
+    title: 'Confirm overall result + first failed leaf',
+    detail:
+      'Use finished.json / Prow state, then the first non-best-effort failed step directory under artifacts/<test>/.',
+  },
+  {
+    title: 'Read the step log that owns the failure',
+    detail:
+      'For install: .openshift_install.log. For network/cleanup: build-log.txt. For tests: junit + e2e.log — not only the root ci-operator log.',
+  },
+  {
+    title: 'Capture lease, profile, and qemu host',
+    detail:
+      'Acquired lease + cluster profile from root build-log; “Using libvirt connection for qemu+tcp://…” from cleanup/install steps. Maps the failure to a physical LPAR.',
+  },
+  {
+    title: 'Classify: infra vs product vs flake',
+    detail:
+      'Stale volumes / VPN / lease config → infra. Bootstrap/operators → install. JUnit failures after a healthy install → product or known flake (check exclude tags).',
+  },
+  {
+    title: 'Decide the fix locus in openshift/release',
+    detail:
+      'Job env/test definition → multiarch nightly YAML. Step logic → step-registry ref. Lease/host map → cluster-secrets for the profile.',
+  },
+];
+
+/** Where developers usually edit when changing Z CI behaviour. */
+export const EDIT_PATHS: EditPathInfo[] = [
+  {
+    change: 'Add / tweak a nightly test (env, workflow, profile)',
+    path: 'ci-operator/config/openshift/multiarch/openshift-multiarch-main__nightly-*.yaml',
+    url: `${RELEASE}/ci-operator/config/openshift/multiarch`,
+  },
+  {
+    change: 'Change PRE/TEST/POST orchestration',
+    path: 'ci-operator/step-registry/openshift/e2e/libvirt/vpn/',
+    url: `${RELEASE}/ci-operator/step-registry/openshift/e2e/libvirt/vpn`,
+  },
+  {
+    change: 'Edit install / network / cleanup leaf scripts',
+    path: 'ci-operator/step-registry/upi/{conf,install,libvirt}/',
+    url: `${RELEASE}/ci-operator/step-registry/upi`,
+  },
+  {
+    change: 'Heterogeneous (z-xz / z-za) chains',
+    path: 'ci-operator/step-registry/openshift/e2e/libvirt/upi/heterogeneous/',
+    url: `${RELEASE}/ci-operator/step-registry/openshift/e2e/libvirt/upi/heterogeneous`,
+  },
+  {
+    change: 'Regenerate jobs after config edits',
+    path: 'ci-operator/jobs/openshift/multiarch/ (via make update)',
+    url: `${RELEASE}/ci-operator/jobs/openshift/multiarch`,
+  },
+];
+
 export function workflowByName(name: string | null | undefined): GuideWorkflow {
   const hit = GUIDE_WORKFLOWS.find((w) => w.name === name || w.id === name);
   return hit || GUIDE_WORKFLOWS[0];
@@ -676,7 +838,7 @@ export function workflowByName(name: string | null | undefined): GuideWorkflow {
 export function workflowByJobHints(jobName: string, workflow?: string | null): GuideWorkflow {
   if (workflow) return workflowByName(workflow);
   if (/fips/i.test(jobName)) return workflowByName('vpn-fips');
-  if (/z-xz|heterogeneous/i.test(jobName)) return workflowByName('hetero');
+  if (/z-xz|z-za|heterogeneous/i.test(jobName)) return workflowByName('hetero');
   if (/ibmcloud/i.test(jobName)) return workflowByName('ibmcloud');
   if (/external-ibmz-upi|libvirt-upi/i.test(jobName) && !/vpn/i.test(jobName)) {
     return workflowByName('upi');

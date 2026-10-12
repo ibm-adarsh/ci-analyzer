@@ -4,10 +4,13 @@ import { WorkflowGuideView } from '../components/WorkflowGuideView';
 export function WorkflowGuidePage() {
   return (
     <div className="wg-page">
-      <div style={{ marginBottom: 8 }}>
-        <Link to="/" className="muted">
-          ← Back to debugger
+      <div className="wg-page-bar">
+        <Link to="/" className="wg-page-back">
+          ← Debugger
         </Link>
+        <p className="wg-page-note">
+          Developer reference for IBM Z libvirt workflows — pair with a Prow URL in the debugger.
+        </p>
       </div>
       <WorkflowGuideView />
     </div>
