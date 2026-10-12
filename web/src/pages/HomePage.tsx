@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { executionRoute, parseProwUrl } from '../lib/url';
 
 const RECENT_KEY = 'ibmz_debug_recent';
@@ -138,8 +138,8 @@ export function HomePage() {
       )}
 
       <p className="muted" style={{ marginTop: 16, fontSize: 12, lineHeight: 1.55 }}>
-        Focused on <strong>libvirt-s390x-vpn</strong> / <strong>vpn-oz</strong> profiles and the{' '}
-        <code>openshift-e2e-libvirt-vpn</code> workflow from{' '}
+        Focused on <strong>libvirt-s390x-vpn</strong> (and related Z profiles) with{' '}
+        <code>openshift-e2e-libvirt-vpn</code> from{' '}
         <a
           href="https://github.com/openshift/release/blob/master/ci-operator/step-registry/openshift/e2e/libvirt/vpn/openshift-e2e-libvirt-vpn-workflow.yaml"
           target="_blank"
@@ -147,7 +147,8 @@ export function HomePage() {
         >
           openshift/release
         </a>
-        . Not a fleet dashboard — one job, full debug context.
+        . New to Z CI? Read the{' '}
+        <Link to="/guide">workflow guide</Link> (steps, install mapping, environments, 4.13→5.x).
       </p>
     </div>
   );

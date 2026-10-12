@@ -30,6 +30,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </Link>
         <div className="topbar-actions">
+          <Link to="/guide" className="btn">
+            Workflow guide
+          </Link>
           <button
             type="button"
             className="btn"

@@ -30,6 +30,8 @@ Paste Prow URL ──► parseProwUrl ──► /e/:bucket/:path
 | `lib/diagnosis.ts` | Patterns, snippets, evidence-bound diagnosis |
 | `lib/release.ts` | Nightly tag / pullspecs / lease parsing |
 | `lib/agentPrompt.ts` | Copy-paste prompt for external AI agents |
+| `data/workflowGuide.ts` | Curated Z workflow / profile / env education (from release clone) |
+| `components/WorkflowGuideView.tsx` | Guide UI (also `/guide` + job tab) |
 | `data/*` | Fail patterns, step KB, LPAR map, constants |
 
 ## GitHub Pages

@@ -7,9 +7,10 @@ import { releaseBrowserLinks } from '../lib/release';
 import { parseExecutionRoute } from '../lib/url';
 import { WORKFLOW_SOURCE } from '../data/vpnWorkflow';
 import { StatusBadge } from '../components/StatusBadge';
+import { WorkflowGuideView } from '../components/WorkflowGuideView';
 import { resolveLpar } from '../lib/lparResolve';
 
-type PageTab = 'debug' | 'prompt';
+type PageTab = 'debug' | 'prompt' | 'guide';
 
 export function ExecutionPage() {
   const { bucketEnc = '', pathEnc = '' } = useParams();
@@ -158,10 +159,26 @@ export function ExecutionPage() {
         >
           AI agent prompt
         </button>
+        <button
+          type="button"
+          className={tab === 'guide' ? 'tab active' : 'tab'}
+          onClick={() => setTab('guide')}
+        >
+          Workflow guide
+        </button>
       </nav>
 
       {tab === 'prompt' ? (
         <AgentPromptPanel a={a} />
+      ) : tab === 'guide' ? (
+        <section className="panel">
+          <WorkflowGuideView
+            key={`${a.jobName}:${a.meta.workflow || WORKFLOW_SOURCE.name}`}
+            compact
+            workflowName={a.meta.workflow || WORKFLOW_SOURCE.name}
+            jobName={a.jobName}
+          />
+        </section>
       ) : (
         <>
           <section className="panel" style={{ marginBottom: 12 }}>
