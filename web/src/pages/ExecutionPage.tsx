@@ -5,11 +5,17 @@ import { buildAgentPrompt } from '../lib/agentPrompt';
 import { fmtDur } from '../lib/gcs';
 import { releaseBrowserLinks } from '../lib/release';
 import { parseExecutionRoute } from '../lib/url';
-import { WORKFLOW_SOURCE } from '../data/vpnWorkflow';
+import { HETERO_ALIASES, WORKFLOW_SOURCE } from '../data/vpnWorkflow';
 import { RELEASE_REPO, STEPS_CI } from '../data/workflow';
 import { StatusBadge } from '../components/StatusBadge';
 import { WorkflowGuideView } from '../components/WorkflowGuideView';
 import { resolveLpar } from '../lib/lparResolve';
+
+/** Map observed GCS / hetero step name onto the workflow leaf used for UI ids. */
+function workflowStepKey(name: string | null | undefined): string | null {
+  if (!name) return null;
+  return HETERO_ALIASES[name] || name;
+}
 
 const WORKFLOW_YAML: Record<string, string> = {
   'openshift-e2e-libvirt-vpn':
@@ -56,12 +62,13 @@ export function ExecutionPage() {
 
   const jumpToStep = (name: string | null) => {
     if (!name) return;
+    const key = workflowStepKey(name) || name;
     setTab('debug');
-    setOpen(name);
+    setOpen(key);
     // Wait for expand + tab paint, then scroll into view.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        const el = stepEls.current.get(name);
+        const el = stepEls.current.get(key) || stepEls.current.get(name);
         if (!el) return;
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         el.classList.remove('dbg-step-flash');
@@ -90,7 +97,7 @@ export function ExecutionPage() {
       .then((res) => {
         if (cancelled) return;
         setA(res);
-        setOpen(res.firstFailed || res.currentStep || null);
+        setOpen(workflowStepKey(res.firstFailed) || res.currentStep || null);
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
@@ -654,6 +661,7 @@ function StepCard({
         <StatusBadge status={w.status === 'current' ? 'RUNNING' : w.status} />
         <span className="dbg-step-name">
           {w.name}
+          {w.observedName ? <em title="GCS artifact directory">{w.observedName}</em> : null}
           {w.bestEffort ? <em>best_effort</em> : null}
         </span>
         <span className="dbg-step-dur mono">

@@ -82,8 +82,12 @@ export const STEP_INFO: Record<string, StepInfo> = {
     keyFiles: ['upi-install-libvirt-network/build-log.txt'],
   },
   'upi-install-libvirt-heterogeneous-network': {
-    desc: 'Creates libvirt network for heterogeneous topology variant.',
-    hints: [{ t:'Same virsh connection as standard variant. Check LEASED_RESOURCE and bastion VPN.', cls:'info' }],
+    desc: 'Creates libvirt network for heterogeneous topology variant (primary + additional hypervisor).',
+    hints: [
+      { t:'Requires <code>vxlan."additional-bridge"</code> in the lease secret for the additional arch host.', cls:'warn' },
+      { t:'Error <code>Couldn\'t find \'vxlan."additional-bridge"\'</code> → Boskos lease config incomplete for this slot (often libvirt-s390x-arm64-*).', cls:'warn' },
+      { t:'Same virsh connection pattern as the homogeneous network step; check LEASED_RESOURCE and bastion VPN.', cls:'info' },
+    ],
     keyFiles: ['upi-install-libvirt-heterogeneous-network/build-log.txt'],
   },
   'rhcos-conf-osstream': {

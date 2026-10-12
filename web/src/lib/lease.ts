@@ -19,10 +19,25 @@ const LEASE_STEPS = [
   'upi-install-libvirt-heterogeneous',
   'upi-conf-libvirt',
   'upi-conf-libvirt-heterogeneous',
+  'upi-conf-libvirt-heterogeneous-network',
   'upi-install-libvirt-network',
+  'upi-install-libvirt-heterogeneous-network',
   'upi-libvirt-cleanup-post',
   'upi-libvirt-cleanup-heterogeneous-post',
 ];
+
+function stepNamesToScan(
+  steps: Record<string, Pick<StepResult, 'logTail' | 'logText'> | undefined>,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const n of [...LEASE_STEPS, ...Object.keys(steps)]) {
+    if (seen.has(n)) continue;
+    seen.add(n);
+    out.push(n);
+  }
+  return out;
+}
 
 function stripAnsi(text: string): string {
   return text.replace(/\x1b\[[0-9;]*m/g, '');
@@ -49,7 +64,7 @@ export function parseLeaseFromProwLog(prowLog: string | null): {
 export function parseLeaseFromSteps(
   steps: Record<string, Pick<StepResult, 'logTail' | 'logText'> | undefined>,
 ): { slot: string; source: string } | null {
-  for (const name of LEASE_STEPS) {
+  for (const name of stepNamesToScan(steps)) {
     const log = steps[name]?.logText || steps[name]?.logTail;
     if (!log || log === '__REDACTED__') continue;
     const text = stripAnsi(log);
@@ -72,7 +87,7 @@ export function parseLeaseFromSteps(
 export function parseLibvirtConnectionFromSteps(
   steps: Record<string, Pick<StepResult, 'logTail' | 'logText'> | undefined>,
 ): { qemuUri: string; hostname: string; source: string } | null {
-  for (const name of LEASE_STEPS) {
+  for (const name of stepNamesToScan(steps)) {
     const log = steps[name]?.logText || steps[name]?.logTail;
     if (!log || log === '__REDACTED__') continue;
     const text = stripAnsi(log);

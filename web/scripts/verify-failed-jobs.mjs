@@ -53,8 +53,16 @@ async function expectFromGcs(parsed) {
       /Imported release\s+(\S+)\s+created at\s+(.+?)\s+with\s+\d+\s+images(?:\s+to tag release:(\S+))?/gi,
     ),
   ];
-  const latest = imported.find((m) => m[3] === 'latest') || imported[imported.length - 1];
-  const initial = imported.find((m) => m[3] === 'initial');
+  const latest =
+    imported.find((m) => m[3] === 'latest') ||
+    imported.find((m) => m[3] === 's390x-latest') ||
+    imported[imported.length - 1];
+  const initialImported =
+    imported.find((m) => m[3] === 'initial') ||
+    imported.find((m) => m[3] === 's390x-initial') ||
+    imported.find((m) => m[3] === 'multi-initial');
+  // Only Imported … to tag release:*initial* counts (Resolved initial appears on non-upgrades).
+  const initialTag = initialImported?.[1] || null;
 
   const listUrl = `https://storage.googleapis.com/storage/v1/b/${parsed.bucket}/o?prefix=${encodeURIComponent(parsed.gcsPath + '/artifacts/')}&delimiter=/`;
   const list = await (await fetch(listUrl)).json();
@@ -86,9 +94,14 @@ async function expectFromGcs(parsed) {
     }
     for (const s of [
       'upi-libvirt-cleanup-pre',
+      'upi-libvirt-cleanup-heterogeneous-pre',
       'upi-install-libvirt-network',
+      'upi-install-libvirt-heterogeneous-network',
       'upi-libvirt-cleanup-post',
+      'upi-libvirt-cleanup-heterogeneous-post',
       'upi-install-libvirt',
+      'upi-install-libvirt-heterogeneous',
+      ...stepNames,
     ]) {
       const log = await fetchText(`${base}/artifacts/${sub}/${s}/build-log.txt`);
       if (!log) continue;
@@ -106,7 +119,7 @@ async function expectFromGcs(parsed) {
     leasePool: leaseM?.[1] || null,
     profile: labelProfile || profileM?.[1] || null,
     releaseTag: latest?.[1] || null,
-    initialTag: initial?.[1] || null,
+    initialTag,
     qemu,
     failedSteps,
     testSubdir: sub,

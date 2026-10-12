@@ -39,11 +39,15 @@ export function parseReleaseFromProwLog(prowLog: string | null): ReleaseInfo | n
   let initialTag: string | null = null;
 
   if (imported.length) {
-    // Only treat release:initial as an upgrade-from payload — not a secondary
-    // stream like release:s390x-latest on single-arch jobs.
-    for (const m of imported) {
-      if (m[3] === 'initial') initialTag = m[1];
-    }
+    // Upgrade-from payloads: release:initial, or arch-scoped *-initial
+    // (older s390x upgrade jobs use release:s390x-initial). Never treat
+    // release:s390x-latest as the upgrade-from tag.
+    const initialImported =
+      imported.find((m) => m[3] === 'initial') ||
+      imported.find((m) => m[3] === 's390x-initial') ||
+      imported.find((m) => m[3] === 'multi-initial');
+    if (initialImported) initialTag = initialImported[1];
+
     const latest =
       imported.find((m) => m[3] === 'latest') ||
       imported.find((m) => m[3] === 's390x-latest') ||
@@ -54,6 +58,10 @@ export function parseReleaseFromProwLog(prowLog: string | null): ReleaseInfo | n
     tag = importing[1];
     createdAt = importing[2]?.replace(/\s+with\s+\d+\s+images.*$/i, '').trim() || null;
   }
+
+  // Do not infer initialTag from "Resolved release initial" alone — ci-operator
+  // resolves those streams on non-upgrade jobs too. Only Imported … to tag
+  // release:initial / s390x-initial / multi-initial means an upgrade-from payload.
 
   let pullSpec: string | null = null;
   for (const name of ['multi-latest', 'latest', 's390x-latest']) {

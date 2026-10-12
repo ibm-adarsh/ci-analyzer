@@ -1,11 +1,12 @@
 import { BEST_EFFORT_STEPS, PHASE_META } from '../data/workflow';
-import { VPN_WORKFLOW_STEPS } from '../data/vpnWorkflow';
+import { HETERO_ALIASES, VPN_WORKFLOW_STEPS } from '../data/vpnWorkflow';
 import { STEP_INFO } from '../data/stepInfo';
 import type { Diagnosis, StepResult } from '../types';
 import { fmtDur } from './gcs';
 
 function phaseForStep(ref: string): keyof typeof PHASE_META | null {
-  const def = VPN_WORKFLOW_STEPS.find((s) => s.name === ref);
+  const canon = HETERO_ALIASES[ref] || ref;
+  const def = VPN_WORKFLOW_STEPS.find((s) => s.name === canon || s.name === ref);
   if (def) return def.phase;
   if (ref.includes('gather') || ref.includes('cleanup-post') || ref.includes('kdump-gather')) return 'post';
   if (ref.includes('test') || ref.includes('e2e')) return 'test';
@@ -52,22 +53,33 @@ export function buildDiagnosis(input: {
   }
 
   const step = input.steps[ref];
-  const info = STEP_INFO[ref];
+  const canon = HETERO_ALIASES[ref] || ref;
+  const info = STEP_INFO[ref] || STEP_INFO[canon];
   const phaseKey = phaseForStep(ref);
   const phaseLbl = phaseKey ? PHASE_META[phaseKey].label : 'Unknown phase';
-  const isBestEffort = BEST_EFFORT_STEPS.has(ref);
+  const isBestEffort = BEST_EFFORT_STEPS.has(ref) || BEST_EFFORT_STEPS.has(canon);
+  const logBlob = `${step?.failureSnippet || ''}\n${step?.logTail || ''}\n${step?.logText || ''}`;
 
   d.summary = isBestEffort
     ? `Primary observed failure is best-effort step ${ref} (${phaseLbl}). Treat as secondary unless install/test also failed.`
     : `Primary failure signal: step ${ref} failed during ${phaseLbl}.`;
   d.confidence = step?.finJson?.passed === false ? 'medium' : 'low';
   d.facts.push(`First failing step (non-best-effort preferred): ${ref}`);
+  if (canon !== ref) d.facts.push(`Maps to workflow leaf: ${canon}`);
   d.facts.push(`Phase: ${phaseLbl}`);
   if (step?.duration != null) d.facts.push(`Step duration (inferred): ${fmtDur(step.duration)}`);
   if (step?.finJson?.passed === false) d.facts.push('Confirmed by step finished.json: passed=false');
   if (isBestEffort) d.facts.push('This step is typically best_effort / optional_on_success');
   if (input.secondaryFailed.length) {
     d.facts.push(`Additional failed steps: ${input.secondaryFailed.join(', ')}`);
+  }
+
+  if (/Couldn't find 'vxlan\."additional-bridge"'/i.test(logBlob) || /additional-bridge/i.test(logBlob)) {
+    d.hypotheses.push({
+      tag: 'lease-config',
+      text: 'Lease config is missing vxlan."additional-bridge" — common on z-za / arm64-mixed leases when the Boskos secret lacks the heterogeneous VXLAN field.',
+    });
+    d.confidence = 'high';
   }
 
   d.evidence.push({

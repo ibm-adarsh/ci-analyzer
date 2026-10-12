@@ -22,6 +22,8 @@ export type WorkflowStepStatus = StepStatus | 'pending' | 'current';
 
 export interface WorkflowStepView {
   name: string;
+  /** GCS artifact directory when it differs from workflow name (hetero aliases). */
+  observedName?: string | null;
   phase: 'pre' | 'test' | 'post';
   status: WorkflowStepStatus;
   bestEffort?: boolean;
@@ -136,31 +138,39 @@ async function fetchAllSteps(
   return results;
 }
 
-function keyArtifactsFor(step: string, artBase: string): { label: string; url: string }[] {
+function keyArtifactsFor(step: string, stepBase: string): { label: string; url: string }[] {
   const out: { label: string; url: string }[] = [
-    { label: 'build-log.txt', url: `${artBase}/${step}/build-log.txt` },
+    { label: 'build-log.txt', url: `${stepBase}/build-log.txt` },
   ];
   if (step.includes('upi-install-libvirt') && !step.includes('network')) {
-    out.push({ label: '.openshift_install.log', url: `${artBase}/${step}/.openshift_install.log` });
+    out.push({ label: '.openshift_install.log', url: `${stepBase}/.openshift_install.log` });
   }
   if (step === 'openshift-e2e-libvirt-test') {
-    out.push({ label: 'artifacts/junit/', url: `${artBase}/${step}/artifacts/junit/` });
-    out.push({ label: 'e2e.log', url: `${artBase}/${step}/e2e.log` });
+    out.push({ label: 'artifacts/junit/', url: `${stepBase}/artifacts/junit/` });
+    out.push({ label: 'e2e.log', url: `${stepBase}/e2e.log` });
   }
   if (step === 'gather-must-gather') {
     out.push({
       label: 'must-gather.tar.gz',
-      url: `${artBase}/${step}/must-gather.tar.gz`,
+      url: `${stepBase}/must-gather.tar.gz`,
     });
   }
   return out;
+}
+
+/** Observed GCS dir for a workflow leaf (hetero aliases map onto VPN names). */
+function observedDirFor(canon: string, steps: Record<string, StepResult>): string | null {
+  if (steps[canon]) return canon;
+  for (const [hetero, c] of Object.entries(HETERO_ALIASES)) {
+    if (c === canon && steps[hetero]) return hetero;
+  }
+  return null;
 }
 
 function buildWorkflowView(
   jobName: string,
   profile: string | null | undefined,
   steps: Record<string, StepResult>,
-  artBase: string,
   jobRunning: boolean,
 ): { workflow: WorkflowStepView[]; currentStep: string | null } {
   const defs = workflowForJob(jobName, profile);
@@ -172,9 +182,11 @@ function buildWorkflowView(
 
   const workflow: WorkflowStepView[] = defs.map((d) => {
     const obs = byName[d.name];
+    const observedName = observedDirFor(d.name, steps);
     if (!obs) {
       return {
         name: d.name,
+        observedName: null,
         phase: d.phase,
         status: 'pending' as const,
         bestEffort: d.bestEffort,
@@ -188,8 +200,10 @@ function buildWorkflowView(
         keyArtifacts: [],
       };
     }
+    const dir = observedName || d.name;
     return {
       name: d.name,
+      observedName: observedName && observedName !== d.name ? observedName : null,
       phase: d.phase,
       status: obs.status,
       bestEffort: d.bestEffort || BEST_EFFORT_STEPS.has(d.name),
@@ -200,7 +214,7 @@ function buildWorkflowView(
       failureSnippet: obs.failureSnippet,
       logTail: obs.logTail,
       stepBase: obs.stepBase,
-      keyArtifacts: keyArtifactsFor(d.name, artBase),
+      keyArtifacts: keyArtifactsFor(dir, obs.stepBase),
     };
   });
 
@@ -211,6 +225,7 @@ function buildWorkflowView(
     const obs = steps[name];
     workflow.push({
       name,
+      observedName: null,
       phase: 'pre',
       status: obs.status,
       observed: true,
@@ -219,7 +234,7 @@ function buildWorkflowView(
       failureSnippet: obs.failureSnippet,
       logTail: obs.logTail,
       stepBase: obs.stepBase,
-      keyArtifacts: keyArtifactsFor(name, artBase),
+      keyArtifacts: keyArtifactsFor(name, obs.stepBase),
     });
   }
 
@@ -358,14 +373,26 @@ export async function analyzeExecution(
   }
 
   const configuredNames = VPN_WORKFLOW_STEPS.map((s) => s.name);
-  const orderedForFailure = [
-    ...configuredNames.filter((s) => steps[s]?.status === 'failed'),
-    ...Object.keys(steps).filter((s) => steps[s]?.status === 'failed' && !configuredNames.includes(s)),
-  ];
-  // Prefer first failed in workflow order
-  const failedInOrder = configuredNames.filter((s) => steps[s]?.status === 'failed');
+  // Prefer first failed in workflow order; use observed GCS dir names (hetero aliases).
+  const failedInOrder = configuredNames
+    .map((canon) => {
+      const dir = observedDirFor(canon, steps);
+      if (!dir || steps[dir]?.status !== 'failed') return null;
+      return dir;
+    })
+    .filter((s): s is string => !!s);
+  const extrasFailed = Object.keys(steps).filter(
+    (s) =>
+      steps[s]?.status === 'failed' &&
+      !failedInOrder.includes(s) &&
+      !configuredNames.includes(s) &&
+      !HETERO_ALIASES[s],
+  );
   const firstFailed =
-    failedInOrder.find((s) => !BEST_EFFORT_STEPS.has(s)) || failedInOrder[0] || orderedForFailure[0] || null;
+    failedInOrder.find((s) => !BEST_EFFORT_STEPS.has(s) && !BEST_EFFORT_STEPS.has(HETERO_ALIASES[s] || '')) ||
+    failedInOrder[0] ||
+    extrasFailed[0] ||
+    null;
   const secondaryFailed = Object.keys(steps).filter(
     (s) => steps[s]?.status === 'failed' && s !== firstFailed,
   );
@@ -375,7 +402,6 @@ export async function analyzeExecution(
     jobName,
     meta.profile,
     steps,
-    artBase,
     result === 'RUNNING',
   );
 

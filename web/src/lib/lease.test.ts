@@ -49,6 +49,31 @@ Resolved release multi-latest to quay.io/openshift-release-dev/ocp-release-night
     expect(rel?.initialTag).toBeNull();
   });
 
+  it('treats release:s390x-initial as upgrade-from on older Z upgrades', () => {
+    const log = `
+Imported release 4.13.0-0.nightly-s390x-2024-11-20-091923 created at 2024-11-20 09:19:27 +0000 UTC with 181 images to tag release:s390x-initial
+Imported release 4.14.0-0.nightly-s390x-2026-10-08-100525 created at 2026-10-08 10:06:44 +0000 UTC with 186 images to tag release:s390x-latest
+Imported release 4.14.0-0.nightly-2026-09-30-024514 created at 2026-09-30 02:46:48 +0000 UTC with 187 images to tag release:latest
+Resolved release s390x-initial to registry.ci.openshift.org/ocp-s390x/release-s390x:4.13.0-0.nightly-s390x-2024-11-20-091923
+Resolved release latest to registry.ci.openshift.org/ocp/release:4.14.0-0.nightly-2026-09-30-024514
+`;
+    const rel = parseReleaseFromProwLog(log);
+    expect(rel?.tag).toBe('4.14.0-0.nightly-2026-09-30-024514');
+    expect(rel?.initialTag).toBe('4.13.0-0.nightly-s390x-2024-11-20-091923');
+  });
+
+  it('ignores Resolved release initial on non-upgrade jobs (no Imported *-initial)', () => {
+    const log = `
+Resolved release initial to registry.ci.openshift.org/ocp/release:4.14.0-0.nightly-2026-09-29-024514
+Resolved release s390x-initial to registry.ci.openshift.org/ocp-s390x/release-s390x:4.14.0-0.nightly-s390x-2026-10-07-100525
+Imported release 4.14.0-0.nightly-s390x-2026-10-08-100525 created at 2026-10-08 10:06:44 +0000 UTC with 186 images to tag release:s390x-latest
+Imported release 4.14.0-0.nightly-2026-09-30-024514 created at 2026-09-30 02:46:48 +0000 UTC with 187 images to tag release:latest
+`;
+    const rel = parseReleaseFromProwLog(log);
+    expect(rel?.tag).toBe('4.14.0-0.nightly-2026-09-30-024514');
+    expect(rel?.initialTag).toBeNull();
+  });
+
   it('reads observed qemu URI from step logs and prefers it over static map', () => {
     const steps = {
       'upi-libvirt-cleanup-post': {
