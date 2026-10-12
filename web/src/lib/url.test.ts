@@ -52,6 +52,17 @@ describe('meta classification', () => {
     expect(parseJobMeta('foo-libvirt-multi-z-z').workflow).toBe('openshift-e2e-libvirt-vpn');
     expect(parseJobMeta('install-analysis-all-s390x').workflow).toBeNull();
   });
+
+  it('maps cluster profile / workflow from job name heuristics', () => {
+    expect(parseJobMeta('…libvirt-multi-z-z').profile).toBe('libvirt-s390x-vpn');
+    expect(parseJobMeta('…libvirt-multi-z-za').profile).toBe('libvirt-s390x-amd64');
+    expect(parseJobMeta('…libvirt-multi-z-za').workflow).toBe(
+      'openshift-e2e-libvirt-upi-heterogeneous',
+    );
+    expect(parseJobMeta('…fips…libvirt-multi-z-z').workflow).toBe(
+      'openshift-e2e-libvirt-vpn-fips',
+    );
+  });
 });
 
 describe('vpn workflow pending', () => {

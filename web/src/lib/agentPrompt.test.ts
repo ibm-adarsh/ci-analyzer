@@ -106,7 +106,15 @@ function sample(partial?: Partial<DebugAnalysis>): DebugAnalysis {
       pullSpec: 'registry.ci.openshift.org/ocp/4.20:tests',
       installTarget: null,
     },
-    leaseSlot: 'libvirt-s390x-vpn-1',
+    leaseSlot: 'libvirt-s390x-0-1',
+    lease: {
+      slot: 'libvirt-s390x-0-1',
+      pool: 'libvirt-s390x-vpn-quota-slice',
+      source: 'ci-operator build-log.txt',
+      hostname: 'lnxocp01.phc-cicd.cis.ibm.net',
+      qemuUri: 'qemu+tcp://lnxocp01.phc-cicd.cis.ibm.net/system',
+      connectionSource: 'upi-libvirt-cleanup-pre/build-log.txt',
+    },
     progressSummary: 'Failed at upi-install-libvirt',
     phaseTimings: [
       { phase: 'pre', label: 'PRE', seconds: 600, timedSteps: 1, stepCount: 11, status: 'failed' },

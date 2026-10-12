@@ -21,8 +21,22 @@ export function parseJobMeta(jobName: string): JobMeta {
         ? 'ppc64le homogeneous (p-p)'
         : 'unknown';
   const arch = /p-p/.test(jobName) ? 'ppc64le' : 's390x';
-  const profile = /ppc64le|p-p/.test(jobName) ? 'libvirt-ppc64le-vpn' : 'libvirt-s390x-vpn';
-  const workflow = /libvirt/.test(jobName) ? 'openshift-e2e-libvirt-vpn' : null;
+  let profile = 'libvirt-s390x-vpn';
+  if (/ppc64le|p-p/.test(jobName)) profile = 'libvirt-ppc64le-s2s';
+  else if (/z-za|z-xz|heterogeneous/.test(jobName)) profile = 'libvirt-s390x-amd64';
+  else if (/libvirt-s390x-vpn-arm64|remote-libvirt.*arm64|vpn-arm64/.test(jobName))
+    profile = 'libvirt-s390x-vpn-arm64';
+
+  let workflow: string | null = null;
+  if (/libvirt/.test(jobName)) {
+    if (/heterogeneous|z-za|z-xz/.test(jobName)) {
+      workflow = 'openshift-e2e-libvirt-upi-heterogeneous';
+    } else if (/fips/.test(jobName)) {
+      workflow = 'openshift-e2e-libvirt-vpn-fips';
+    } else {
+      workflow = 'openshift-e2e-libvirt-vpn';
+    }
+  }
   let archClass: ArchClass = 'unknown';
   if (/z-za/.test(jobName)) archClass = 'multi-arch-heterogeneous';
   else if (/z-z/.test(jobName)) archClass = 'multi-arch-homogeneous';
@@ -54,7 +68,16 @@ export function isIbmZJob(jobName: string): boolean {
   return /z-z|z-za|s390x|libvirt-s390x/.test(jobName);
 }
 
-/** Enrich meta from prowjob.json labels — facts only. */
+/** Enrich profile from ci-operator build-log when labels are missing. */
+export function enrichMetaFromProwLog(meta: JobMeta, prowLog: string | null): void {
+  if (!prowLog || prowLog === '__REDACTED__') return;
+  const m = prowLog
+    .replace(/\x1b\[[0-9;]*m/g, '')
+    .match(/for cluster profile\s+(\S+)/i);
+  if (m?.[1]) meta.profile = m[1];
+}
+
+/** Enrich meta from prowjob.json labels — facts only (highest priority). */
 export function enrichMetaFromProwjob(meta: JobMeta, prowjob: Record<string, unknown> | null): void {
   if (!prowjob) return;
   const metadata = prowjob.metadata as { labels?: Record<string, string> } | undefined;
@@ -110,10 +133,10 @@ export function buildConfigLinks(jobName: string, meta: JobMeta): ConfigLinks {
     group: 'config',
   });
 
-  if (meta.workflow === 'openshift-e2e-libvirt-vpn') {
+  if (meta.workflow) {
     links.push({
-      label: 'Workflow: openshift-e2e-libvirt-vpn',
-      url: `${STEPS_CI}/workflow/openshift-e2e-libvirt-vpn`,
+      label: `Workflow: ${meta.workflow}`,
+      url: `${STEPS_CI}/workflow/${meta.workflow}`,
       group: 'config',
     });
   } else {

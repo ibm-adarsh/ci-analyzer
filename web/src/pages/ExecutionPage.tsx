@@ -99,7 +99,7 @@ export function ExecutionPage() {
       : a.result === 'RUNNING' && a.started?.timestamp
         ? `${fmtDur(Math.floor(Date.now() / 1000) - a.started.timestamp)} so far`
         : '—';
-  const lpar = a.leaseSlot ? resolveLpar(a.leaseSlot) : null;
+  const lpar = a.leaseSlot ? resolveLpar(a.leaseSlot, a.lease) : null;
   const releaseLinks = releaseBrowserLinks(a.release?.tag || null);
   const pending = a.workflow.filter((w) => w.status === 'pending' || w.status === 'current').length;
   const failed = a.workflow.filter((w) => w.status === 'failed').length;
@@ -287,6 +287,7 @@ export function ExecutionPage() {
                   }
                 />
                 <Detail label="Artifact subdir" value={<code>{a.testSubdir || '—'}</code>} />
+                <Detail label="Cluster profile" value={<code>{a.meta.profile || '—'}</code>} />
                 <Detail
                   label="Lease / LPAR"
                   value={
@@ -297,16 +298,38 @@ export function ExecutionPage() {
                           <span className="muted">
                             {' '}
                             → {lpar.lpar}
+                            {lpar.observed ? '' : ' (inferred)'}
                           </span>
+                        ) : null}
+                        {a.lease?.pool ? (
+                          <div className="muted mono" style={{ marginTop: 4 }}>
+                            pool {a.lease.pool}
+                          </div>
                         ) : null}
                       </>
                     ) : (
-                      <span className="muted">Not in root build-log yet</span>
+                      <span className="muted">Not in root build-log / step logs yet</span>
                     )
                   }
                 />
-                {lpar?.qemuUri && (
-                  <Detail label="Libvirt URI" value={<code className="dbg-break">{lpar.qemuUri}</code>} />
+                {(lpar?.qemuUri || a.lease?.qemuUri) && (
+                  <Detail
+                    label="Libvirt URI"
+                    value={
+                      <>
+                        <code className="dbg-break">{a.lease?.qemuUri || lpar?.qemuUri}</code>
+                        {a.lease?.connectionSource ? (
+                          <div className="muted" style={{ marginTop: 4 }}>
+                            from {a.lease.connectionSource}
+                          </div>
+                        ) : lpar && !lpar.observed ? (
+                          <div className="muted" style={{ marginTop: 4 }}>
+                            inferred from lease index (leases secret not in artifacts)
+                          </div>
+                        ) : null}
+                      </>
+                    }
+                  />
                 )}
                 <Detail
                   label="Release"
@@ -316,6 +339,11 @@ export function ExecutionPage() {
                         <code>{a.release.tag}</code>
                         {a.release.createdAt ? (
                           <span className="muted"> · {a.release.createdAt}</span>
+                        ) : null}
+                        {a.release.initialTag ? (
+                          <div className="muted mono" style={{ marginTop: 4 }}>
+                            upgrade from <code>{a.release.initialTag}</code>
+                          </div>
                         ) : null}
                         <div className="dbg-inline-links">
                           {releaseLinks.map((l) => (
@@ -332,7 +360,7 @@ export function ExecutionPage() {
                 />
                 {a.release?.pullSpec && (
                   <Detail
-                    label="Tests image"
+                    label="Release pullspec"
                     value={<code className="dbg-break">{a.release.pullSpec}</code>}
                   />
                 )}

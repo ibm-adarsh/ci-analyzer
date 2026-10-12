@@ -3,10 +3,15 @@ import { HETERO_ALIASES, VPN_WORKFLOW_STEPS, workflowForJob } from '../data/vpnW
 import type { Analysis, JobResult, ParsedUrl, StepResult, StepStatus } from '../types';
 import { buildDiagnosis } from './diagnosis';
 import { fetchJson, fetchText, listPrefix } from './gcs';
-import { buildConfigLinks, enrichMetaFromProwjob, parseJobMeta } from './meta';
+import { extractLeaseInfo, type LeaseInfo } from './lease';
+import {
+  buildConfigLinks,
+  enrichMetaFromProwjob,
+  enrichMetaFromProwLog,
+  parseJobMeta,
+} from './meta';
 import {
   fetchReleaseFromArtifacts,
-  parseLeaseFromProwLog,
   parseReleaseFromProwLog,
   type ReleaseInfo,
 } from './release';
@@ -237,7 +242,9 @@ export interface DebugAnalysis extends Analysis {
   workflow: WorkflowStepView[];
   currentStep: string | null;
   release: ReleaseInfo | null;
+  /** Boskos lease slot string (convenience; same as lease?.slot) */
   leaseSlot: string | null;
+  lease: LeaseInfo | null;
   progressSummary: string;
   phaseTimings: PhaseTiming[];
 }
@@ -295,10 +302,12 @@ export async function analyzeExecution(
   if (!release?.tag) {
     release = (await fetchReleaseFromArtifacts(base)) || release;
   }
-  const leaseSlot = parseLeaseFromProwLog(prowLog);
+  const lease = extractLeaseInfo(prowLog, steps);
+  const leaseSlot = lease?.slot || null;
 
   onProgress?.(85, 'Building debug view…');
   const meta = parseJobMeta(jobName);
+  enrichMetaFromProwLog(meta, prowLog);
   enrichMetaFromProwjob(meta, prowjob);
 
   const prowjobState = (prowjob?.status as { state?: string } | undefined)?.state;
@@ -419,6 +428,7 @@ export async function analyzeExecution(
     currentStep,
     release,
     leaseSlot,
+    lease,
     progressSummary,
     phaseTimings,
   };

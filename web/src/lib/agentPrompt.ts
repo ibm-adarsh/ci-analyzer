@@ -59,14 +59,23 @@ export function buildAgentPrompt(a: DebugAnalysis, mode: PromptMode = 'focused')
   );
   lines.push(`Installer: ${a.meta.installer}`);
   lines.push(`Artifact test subdir: ${a.testSubdir || 'n/a'}`);
-  if (a.leaseSlot) lines.push(`Boskos lease: ${a.leaseSlot}`);
+  if (a.leaseSlot) {
+    lines.push(`Boskos lease: ${a.leaseSlot}`);
+    if (a.lease?.pool) lines.push(`Boskos pool: ${a.lease.pool}`);
+    if (a.lease?.qemuUri) {
+      lines.push(`Libvirt URI (from ${a.lease.connectionSource || 'step log'}): ${a.lease.qemuUri}`);
+    } else if (a.lease?.hostname) {
+      lines.push(`LPAR hostname: ${a.lease.hostname}`);
+    }
+  }
   if (a.release?.tag) {
     lines.push(
       `Release build tag: ${a.release.tag}${a.release.createdAt ? ` (created ${a.release.createdAt})` : ''}`,
     );
+    if (a.release.initialTag) lines.push(`Upgrade from release: ${a.release.initialTag}`);
     lines.push(`Release evidence source: ${a.release.source}`);
   }
-  if (a.release?.pullSpec) lines.push(`Tests image pullspec: ${a.release.pullSpec}`);
+  if (a.release?.pullSpec) lines.push(`Release pullspec: ${a.release.pullSpec}`);
   if (a.release?.installTarget) lines.push(`Install-related image: ${a.release.installTarget}`);
   lines.push(`GCS job root: ${a.base}/`);
   lines.push(`GCS artifacts root: ${a.artBase}/`);
