@@ -100,7 +100,7 @@ async function fetchAllSteps(
 
     const safeLog = logText && logText !== '__REDACTED__' ? logText : '';
     const logTail = safeLog
-      ? safeLog.split('\n').slice(-100).join('\n')
+      ? safeLog.split('\n').slice(-80).join('\n')
       : logText === '__REDACTED__'
         ? '__REDACTED__'
         : null;

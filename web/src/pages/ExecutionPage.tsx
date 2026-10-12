@@ -400,8 +400,8 @@ function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
     <section className="panel">
       <h2>AI agent prompt</h2>
       <p className="muted">
-        Copy into Cursor or any agent. Includes job URL, failed-step artifact links, phase timings,
-        and high-signal log excerpts when detected.
+        Copy into Cursor or any agent. Plain-text brief with job context, failed-step artifact URLs,
+        phase timings, and the last 80 lines of each failed step log.
       </p>
       <div className="prompt-toolbar">
         <div className="seg">

@@ -42,7 +42,7 @@ function sample(partial?: Partial<DebugAnalysis>): DebugAnalysis {
     diagnosis: {
       summary: 'Install failed',
       facts: ['First failing step: upi-install-libvirt'],
-      hypotheses: [{ tag: 'install', text: 'Installer exited non-zero' }],
+      hypotheses: [],
       nextSteps: [],
       evidence: [],
       primaryStep: 'upi-install-libvirt',
@@ -61,7 +61,7 @@ function sample(partial?: Partial<DebugAnalysis>): DebugAnalysis {
       links: [
         {
           label: 'ci-operator config',
-          url: 'https://github.com/openshift/release/blob/master/ci-operator/config/openshift/multiarch/x.yaml',
+          url: 'https://github.com/openshift/release/blob/main/ci-operator/config/openshift/multiarch/x.yaml',
           group: 'config',
         },
       ],
@@ -73,9 +73,9 @@ function sample(partial?: Partial<DebugAnalysis>): DebugAnalysis {
         status: 'failed',
         observed: true,
         duration: 600,
-        patterns: [{ category: 'bootstrap', hint: 'bootstrap failed' }],
-        failureSnippet: 'level=error msg="bootstrap failed to complete"',
-        logTail: 'line1\nline2\nbootstrap failed to complete\n',
+        patterns: [],
+        failureSnippet: null,
+        logTail: Array.from({ length: 90 }, (_, i) => `line-${i + 1}`).join('\n') + '\nbootstrap failed to complete',
         stepBase:
           'https://storage.googleapis.com/test-platform-results-public/logs/job/1/artifacts/e2e/upi-install-libvirt',
         keyArtifacts: [
@@ -118,21 +118,28 @@ function sample(partial?: Partial<DebugAnalysis>): DebugAnalysis {
 }
 
 describe('buildAgentPrompt', () => {
-  it('includes job link, failed step artifacts, and agent instructions', () => {
+  it('is plain text with failed-step artifacts and last 80 log lines', () => {
     const prompt = buildAgentPrompt(sample(), 'focused');
     expect(prompt).toContain('Please analyse this IBM Z');
     expect(prompt).toContain('prow.ci.openshift.org');
     expect(prompt).toContain('upi-install-libvirt');
-    expect(prompt).toContain('build-log.txt');
-    expect(prompt).toContain('.openshift_install.log');
-    expect(prompt).toContain('libvirt-s390x-vpn');
+    expect(prompt).toContain('build-log.txt:');
+    expect(prompt).toContain('.openshift_install.log:');
+    expect(prompt).toContain('Last 80 lines of build-log.txt:');
+    expect(prompt).toContain('bootstrap failed to complete');
+    expect(prompt).not.toContain('line-1\n'); // truncated head of 90-line log
+    expect(prompt).toContain('line-12\n'); // within last 80 of 91 lines
+    expect(prompt).not.toMatch(/^#/m);
+    expect(prompt).not.toContain('##');
+    expect(prompt).not.toContain('**');
     expect(prompt).toContain('What I need from you');
-    expect(prompt).toContain('bootstrap failed');
   });
 
-  it('full mode includes diagnosis facts', () => {
+  it('full mode includes workflow status and diagnosis facts', () => {
     const prompt = buildAgentPrompt(sample(), 'full');
+    expect(prompt).toContain('Workflow status');
     expect(prompt).toContain('Diagnosis facts');
     expect(prompt).toContain('First failing step: upi-install-libvirt');
+    expect(prompt).not.toContain('##');
   });
 });
