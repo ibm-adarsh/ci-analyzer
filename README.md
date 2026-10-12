@@ -1,154 +1,182 @@
-# IBM Z CI Analyzer
+# IBM Z · CI Debugging Workbench
 
-A browser-based tool for analysing IBM Z OpenShift CI job failures on [prow.ci.openshift.org](https://prow.ci.openshift.org). Zero dependencies — single HTML file, runs entirely in the browser.
+A developer-centric workbench for investigating IBM Z OpenShift CI failures on [prow.ci.openshift.org](https://prow.ci.openshift.org).
 
-## 🌐 Access on GitHub Pages
+**Live:** [https://ibm-adarsh.github.io/ci-analyzer](https://ibm-adarsh.github.io/ci-analyzer)
 
-The tool is hosted at:
-
-**[https://ibm-adarsh.github.io/ci-analyzer](https://ibm-adarsh.github.io/ci-analyzer)**
-
-Open the URL, paste a Prow job URL, and click **Analyze**. No install, no login.
-
-> **Note:** If the link returns a 404, the GitHub Pages source needs to be enabled once.  
-> Go to **[Settings → Pages](https://github.com/ibm-adarsh/ci-analyzer/settings/pages)**, set **Source** to **GitHub Actions**, and save.  
-> Then re-run the workflow from [Actions → Deploy to GitHub Pages → Run workflow](https://github.com/ibm-adarsh/ci-analyzer/actions/workflows/pages.yml).
+Paste a Prow URL or browse recent `z-z` / `z-za` / `s390x` executions, then move from **what failed → evidence → configuration → next steps** without manually walking GCS trees or hunting through `openshift/release`.
 
 ---
 
-## 🚀 Run Locally
+## Problems it solves
 
-The tool is a single HTML file — it needs a local HTTP server (not `file://`) because the browser blocks cross-origin GCS API requests from `file://` URLs.
+| Without this tool | With the workbench |
+|-------------------|--------------------|
+| Browse enormous `build-log.txt` files by hand | Failure investigation panel with excerpts + pattern hypotheses (labeled) |
+| Guess which artifact directory matters | Artifact explorer with relevance highlighting + preview |
+| Search GitHub for the right ci-operator YAML | Config tab links built from `prowjob.json` labels |
+| Jump between Prow, gcsweb, and step-registry | One execution page with deep links back to originals |
 
-### Option 1 — Python (recommended, no install needed)
+---
+
+## Supported job categories
+
+- **Multi-arch homogeneous** — job names matching `*z-z*` (Prow filter [`*z-z`](https://prow.ci.openshift.org/?job=*z-z))
+- **Multi-arch heterogeneous** — `*z-za*`
+- **Single-arch s390x** — `*s390x*` / `*libvirt-s390x` (Prow filter [`*s390x`](https://prow.ci.openshift.org/?job=*s390x))
+
+Discovery uses **dynamic GCS prefix scans** under `gs://test-platform-results-public/logs/` for IBM Z naming conventions — not a fixed shortlist. A seed index ships for offline builds; CI regenerates a fresh index on deploy.
+
+Configuration context comes from [openshift/release](https://github.com/openshift/release) (`ci-operator/config`, `ci-operator/jobs`, `ci-operator/step-registry`) via reconstructed links from execution metadata.
+
+---
+
+## Architecture
+
+```
+Browser (GitHub Pages static SPA)
+  ├─ Job index JSON (build-time / scheduled GCS discovery)
+  ├─ On-demand GCS JSON API (CORS-safe) for execution details, steps, logs, artifacts
+  └─ Outbound links → Prow · gcsweb · openshift/release · steps.ci.openshift.org
+```
+
+| Layer | Location | Role |
+|-------|----------|------|
+| UI | `web/src/pages`, `web/src/components` | Discovery + execution workbench |
+| Domain | `web/src/lib/*`, `web/src/data/*` | URL parse, GCS, analysis, diagnosis, discovery |
+| Index generator | `web/scripts/generate-job-index.mjs` | Scheduled / CI job listing |
+| Deploy | `.github/workflows/pages.yml` | `npm ci` → index → test → build → Pages |
+| Legacy zero-dep UI | `tools/prow-job-analyzer/legacy.html` | Previous single-file analyzer (optional) |
+
+**Stack:** Vite · React 19 · TypeScript · React Router (HashRouter for GitHub Pages) · Vitest  
+**Hosting constraint:** static-only GitHub Pages — no server, no secrets in the frontend.
+
+Base path: `/ci-analyzer/` (project Pages site).
+
+---
+
+## Local development
+
+Prerequisites: Node.js 20+ and npm.
 
 ```bash
 git clone https://github.com/ibm-adarsh/ci-analyzer.git
-cd ci-analyzer
-python3 -m http.server 8080
+cd ci-analyzer/web
+npm install
+npm run generate:index   # optional; needs network to GCS
+npm run dev
 ```
 
-Open **http://localhost:8080/tools/prow-job-analyzer/** in your browser.
+Open the URL Vite prints (typically `http://localhost:5173/ci-analyzer/`).
 
-### Option 2 — Node.js (`npx`)
+### Useful commands
 
-```bash
-git clone https://github.com/ibm-adarsh/ci-analyzer.git
-cd ci-analyzer
-npx serve .
-```
+| Command | Purpose |
+|---------|---------|
+| `npm run dev` | Dev server with HMR |
+| `npm test` | Unit tests (Vitest) |
+| `npm run build` | Production build → `web/dist` |
+| `npm run preview` | Preview production build locally |
+| `npm run generate:index` | Refresh `public/data/job-index.json` from GCS |
+| `npm run lint` | Oxlint |
 
-Open the URL printed by `npx serve` and navigate to `tools/prow-job-analyzer/`.
+### Analyze a known URL
 
-### Option 3 — Any other static server
-
-```bash
-# Ruby
-ruby -run -e httpd . -p 8080
-
-# PHP
-php -S localhost:8080
-
-# Go
-go run golang.org/x/tools/cmd/httptest/...  # or any other go static server
-```
-
-Then open **http://localhost:8080/tools/prow-job-analyzer/**.
-
-> **Why not `file://`?**  
-> The tool fetches job artifacts from the GCS JSON API (`storage.googleapis.com`).  
-> Browsers apply stricter CORS rules to `file://` origins and will block these requests.  
-> A local HTTP server serves the file from `http://localhost` which is allowed.
-
----
-
-## 📋 Supported Prow URL Formats
-
-Paste any of these into the analyzer:
+On the home page, paste e.g.:
 
 ```
-# Periodic / nightly job
-https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/<JOB_NAME>/<BUILD_ID>
-
-# PR rehearse job
-https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/<ORG_REPO>/<PR_NUMBER>/<JOB_NAME>/<BUILD_ID>
+https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-openshift-multiarch-main-nightly-5.0-upgrade-from-nightly-4.22-ocp-ovn-remote-libvirt-multi-z-z/2107456138294333440
 ```
 
 ---
 
-## ✨ What the tool shows
+## GitHub Pages deployment
 
-| Tab | Content |
-|-----|---------|
-| **Overview** | Compact job health, LPAR lease, metadata, step chips — entry point for investigation |
-| **Investigate** | Unified failure workbench: confirmed facts, pattern hypotheses (labeled), evidence links, next steps |
-| **Steps & Logs** | Every step grouped by PRE / TEST / POST — status, duration, log search, GCS links |
-| **Artifacts** | Searchable GCS artifact explorer with relevance highlighting and in-browser text preview |
-| **Timeline** | Gantt-style chart of all step durations |
-| **Config** | Correlates execution with `openshift/release` ci-operator config, jobs, and step-registry |
-| **Environment** | Live env vars parsed from `build-log.txt` bash traces + knowledge-base cards |
-| **Debug Guide** | Full `openshift-e2e-libvirt-vpn` workflow reference + Job Status Checklist |
-| **CI Operator Log** | Root ci-operator `build-log.txt` with colour coding and regex filter |
+Workflow: `.github/workflows/pages.yml`
 
-Also includes a **job browser** for recent multi-arch `z-z` / `z-za` and single-arch `s390x` executions discovered from public GCS.
+1. Install `web/` dependencies  
+2. Generate job index from public GCS (`continue-on-error` + seed fallback)  
+3. Run `npm test`  
+4. Build with `base: /ci-analyzer/`  
+5. Upload `web/dist` via `actions/upload-pages-artifact`  
+6. Deploy with `actions/deploy-pages`
 
----
+**Repo settings:** Settings → Pages → Source = **GitHub Actions**.
 
-## 🏗️ Repo Layout
+Triggers: push to `main` (paths under `web/` or the workflow), daily cron `06:00 UTC`, and `workflow_dispatch`.
 
-```
-ci-analyzer/
-├── tools/
-│   ├── prow-job-analyzer/       ← the browser tool (source of truth)
-│   │   ├── index.html           ← single-file app (all CSS + JS inline)
-│   │   └── README.md            ← detailed tool reference
-│   ├── build/                   ← CI Jenkins image & release pipeline
-│   ├── changelog/               ← changelog generation utility
-│   ├── godepversion/            ← Go dependency version helper
-│   ├── gotest2junit/            ← go test → JUnit XML converter
-│   ├── hack/                    ← build scripts and Makefile helpers
-│   ├── import-verifier/         ← Go import restriction verifier
-│   ├── junitmerge/              ← merges multiple JUnit XML files
-│   └── junitreport/             ← produces JUnit reports from test output
-├── .github/
-│   └── workflows/
-│       └── pages.yml            ← GitHub Actions: auto-deploy to Pages on push
-├── .gitignore
-├── LICENSE                      ← Apache 2.0
-└── README.md                    ← this file
-```
+### CORS / data access
 
-> `docs/` is **not committed** — it is built by the CI workflow at deploy time and served by GitHub Pages.
+- GCS **JSON API** (`storage/v1/.../o/...?alt=media`) returns CORS headers for public buckets — used for in-app fetches.
+- Direct `storage.googleapis.com/{bucket}/{object}` links open in a new tab (download / view).
+- `prow.ci.openshift.org/prowjobs.js` is **not** used (403 from browsers).
+- No private tokens are embedded. All data is public CI output.
 
 ---
 
-## 🔄 How GitHub Pages deployment works
+## Investigation workflow
 
-Every push to `main` that touches `tools/prow-job-analyzer/index.html` or `.github/workflows/pages.yml` triggers the [Deploy to GitHub Pages](.github/workflows/pages.yml) workflow:
+1. **Discover** — filter by result / arch, or paste a Prow URL  
+2. **Overview** — status, timing, observed steps  
+3. **Investigate** — facts vs labeled hypotheses, evidence links, next actions  
+4. **Steps & Logs** — phase-grouped steps, snippets, pattern hints  
+5. **Artifacts** — browse real GCS prefixes; preview text logs  
+6. **Config** — variant/profile/refs → openshift/release + step-registry links  
 
-1. Checks out the repo
-2. Copies `tools/prow-job-analyzer/index.html` → `docs/index.html`
-3. Uploads `docs/` as a GitHub Pages artifact
-4. Deploys to `https://ibm-adarsh.github.io/ci-analyzer`
-
-No manual steps needed after the initial Pages source setting.
-
----
-
-## 🛠️ Making changes
-
-Edit the tool source:
-
-```
-tools/prow-job-analyzer/index.html
-```
-
-Then commit and push to `main`. The Pages deployment runs automatically within ~30 seconds.
-
-To test locally before pushing, use the local server instructions above.
+Deep links use HashRouter: `#/execution/<bucket>/<urlencoded-gcs-path>`.
 
 ---
 
-## 📜 License
+## Evidence & confidence
+
+Diagnostic claims are labeled:
+
+- **Confirmed facts** — from `finished.json`, prowjob status, step directories  
+- **Pattern hypotheses** — regex matches in logs (not proven root cause)  
+- **Unresolved** — missing variant/workflow labels  
+
+Primary failure prefers non-`best_effort` steps (gather/cleanup are secondary when install/test also failed).
+
+---
+
+## Security
+
+- Static frontend only; no privileged credentials  
+- Artifact access is limited to public GCS URLs the user already could open in Prow  
+- Log previews are size-capped (~180KB)  
+- Treat CI logs as sensitive engineering data when sharing  
+
+---
+
+## Legacy single-file analyzer
+
+The previous zero-dependency HTML app is preserved at:
+
+`tools/prow-job-analyzer/legacy.html`
+
+Open via any static server. The `tools/prow-job-analyzer/index.html` entry redirects to the new workbench on GitHub Pages.
+
+---
+
+## Contributing
+
+1. Change code under `web/src`  
+2. Add/adjust Vitest coverage for pure logic (`web/src/lib/*.test.ts`)  
+3. `npm test && npm run build`  
+4. Open a PR  
+
+---
+
+## Known limitations
+
+- Prow deck APIs are not browser-accessible; discovery uses GCS listings  
+- Config YAML is linked, not fully parsed into an execution graph  
+- Line-level Spyglass deep links are not always available — nearest artifact/log is used  
+- Job index freshness depends on the last CI/scheduled generate run  
+- GitHub Pages cannot proxy private artifacts  
+
+---
+
+## License
 
 Apache 2.0 — see [LICENSE](LICENSE)
