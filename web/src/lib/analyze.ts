@@ -1,7 +1,7 @@
 import { BEST_EFFORT_STEPS } from '../data/workflow';
 import { HETERO_ALIASES, VPN_WORKFLOW_STEPS, workflowForJob } from '../data/vpnWorkflow';
 import type { Analysis, JobResult, ParsedUrl, StepResult, StepStatus } from '../types';
-import { buildDiagnosis, detectPatterns, extractSnippet } from './diagnosis';
+import { buildDiagnosis, extractSnippet } from './diagnosis';
 import { fetchJson, fetchText, listPrefix } from './gcs';
 import { buildConfigLinks, enrichMetaFromProwjob, parseJobMeta } from './meta';
 import {
@@ -104,8 +104,7 @@ async function fetchAllSteps(
       : logText === '__REDACTED__'
         ? '__REDACTED__'
         : null;
-    const patterns = detectPatterns(safeLog);
-    const failureSnippet = extractSnippet(safeLog, patterns);
+    const failureSnippet = status === 'failed' ? extractSnippet(safeLog) : null;
 
     results[stepName] = {
       status,
@@ -113,7 +112,7 @@ async function fetchAllSteps(
       finJson,
       logTail,
       logText: safeLog || null,
-      patterns,
+      patterns: [],
       failureSnippet,
       stepBase,
     };
@@ -227,12 +226,48 @@ function buildWorkflowView(
   return { workflow, currentStep };
 }
 
+export interface PhaseTiming {
+  phase: 'pre' | 'test' | 'post';
+  label: string;
+  seconds: number;
+  timedSteps: number;
+  stepCount: number;
+  status: string;
+}
+
 export interface DebugAnalysis extends Analysis {
   workflow: WorkflowStepView[];
   currentStep: string | null;
   release: ReleaseInfo | null;
   leaseSlot: string | null;
   progressSummary: string;
+  phaseTimings: PhaseTiming[];
+}
+
+function computePhaseTimings(
+  workflow: WorkflowStepView[],
+  phaseStatus: Record<string, string>,
+): PhaseTiming[] {
+  const labels = { pre: 'PRE', test: 'TEST', post: 'POST' } as const;
+  return (['pre', 'test', 'post'] as const).map((ph) => {
+    const group = workflow.filter((w) => w.phase === ph);
+    let seconds = 0;
+    let timedSteps = 0;
+    for (const w of group) {
+      if (w.duration != null && w.duration >= 0) {
+        seconds += w.duration;
+        timedSteps += 1;
+      }
+    }
+    return {
+      phase: ph,
+      label: labels[ph],
+      seconds,
+      timedSteps,
+      stepCount: group.length,
+      status: phaseStatus[ph] || 'unknown',
+    };
+  });
 }
 
 export async function analyzeExecution(
@@ -353,6 +388,8 @@ export async function analyzeExecution(
     progressSummary = 'All observed steps passed; job finished successfully.';
   }
 
+  const phaseTimings = computePhaseTimings(workflow, phaseStatus);
+
   onProgress?.(100, 'Done');
 
   return {
@@ -385,5 +422,6 @@ export async function analyzeExecution(
     release,
     leaseSlot,
     progressSummary,
+    phaseTimings,
   };
 }

@@ -67,7 +67,7 @@ describe('vpn workflow pending', () => {
 });
 
 describe('diagnosis', () => {
-  it('labels hypotheses and prefers non-best-effort primary', () => {
+  it('prefers non-best-effort primary and links evidence', () => {
     const d = buildDiagnosis({
       result: 'FAILED',
       firstFailed: 'openshift-e2e-libvirt-test',
@@ -79,7 +79,7 @@ describe('diagnosis', () => {
           finJson: { passed: false },
           logTail: 'Failing tests:\n[sig-foo]',
           logText: 'failed due to a MonitorTest failure\nFailing tests:\n[sig-foo]',
-          patterns: [{ category: 'MonitorTest Failure', hint: 'monitor' }],
+          patterns: [],
           failureSnippet: 'failed due to a MonitorTest failure',
           stepBase: 'https://example/openshift-e2e-libvirt-test',
         },
@@ -100,7 +100,7 @@ describe('diagnosis', () => {
     });
     expect(d.primaryStep).toBe('openshift-e2e-libvirt-test');
     expect(d.confidence).toBe('medium');
-    expect(d.hypotheses[0].tag).toContain('Pattern');
+    expect(d.hypotheses).toHaveLength(0);
     expect(d.evidence.some((e) => e.primary)).toBe(true);
   });
 });

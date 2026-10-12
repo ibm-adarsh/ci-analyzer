@@ -79,9 +79,6 @@ export function buildAgentPrompt(a: DebugAnalysis, mode: PromptMode = 'focused')
       for (const art of w.keyArtifacts) {
         lines.push(`  - ${art.label}: ${art.url}`);
       }
-      if (w.patterns.length) {
-        lines.push(`  - Matched patterns: ${w.patterns.map((p) => p.category).join(', ')}`);
-      }
     }
     if (a.secondaryFailed.length) {
       lines.push(`- Additional failed steps: ${a.secondaryFailed.map((s) => `\`${s}\``).join(', ')}`);
@@ -108,11 +105,12 @@ export function buildAgentPrompt(a: DebugAnalysis, mode: PromptMode = 'focused')
   }
   lines.push('');
 
-  if (a.diagnosis.hypotheses.length) {
-    lines.push('## Pattern hypotheses (NOT proven root cause)');
-    for (const h of a.diagnosis.hypotheses.slice(0, 6)) {
-      const plain = h.text.replace(/<[^>]+>/g, '');
-      lines.push(`- **${h.tag}:** ${plain}`);
+  if (a.phaseTimings?.length) {
+    lines.push('## Phase durations (sum of step finished.json deltas)');
+    for (const t of a.phaseTimings) {
+      lines.push(
+        `- **${t.label}:** ${fmtDur(t.seconds)} (${t.timedSteps}/${t.stepCount} timed steps, status=${t.status})`,
+      );
     }
     lines.push('');
   }

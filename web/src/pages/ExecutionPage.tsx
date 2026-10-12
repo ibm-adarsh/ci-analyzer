@@ -198,9 +198,10 @@ export function ExecutionPage() {
               </div>
               <div className="stat">
                 <b style={{ fontSize: 14 }}>{dur}</b>
-                <span>Duration</span>
+                <span>Total</span>
               </div>
             </div>
+            <PhaseTimeline timings={a.phaseTimings} />
             <div className="kv" style={{ marginTop: 8 }}>
               <span className="k">Started</span>
               <span className="v">{start}</span>
@@ -402,6 +403,52 @@ function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
   );
 }
 
+function PhaseTimeline({ timings }: { timings: DebugAnalysis['phaseTimings'] }) {
+  const total = timings.reduce((s, t) => s + t.seconds, 0);
+  const hasAny = timings.some((t) => t.timedSteps > 0);
+  if (!hasAny) {
+    return (
+      <p className="muted" style={{ margin: '12px 0 0', fontSize: 12.5 }}>
+        Phase timing unavailable yet (needs finished.json timestamps on steps).
+      </p>
+    );
+  }
+  return (
+    <div className="phase-tl" aria-label="Phase duration timeline">
+      <div className="phase-tl-head">
+        <span>Phase time</span>
+        <span className="mono">{fmtDur(total)} summed from step finishes</span>
+      </div>
+      <div className="phase-tl-bar">
+        {timings.map((t) => {
+          const pct = total > 0 ? Math.max(t.seconds > 0 ? 4 : 0, (t.seconds / total) * 100) : 0;
+          return (
+            <div
+              key={t.phase}
+              className={`phase-tl-seg ph-${t.phase} st-${t.status}`}
+              style={{ flexGrow: Math.max(t.seconds, t.timedSteps ? 1 : 0), flexBasis: 0 }}
+              title={`${t.label}: ${fmtDur(t.seconds)}`}
+            >
+              {pct >= 12 ? <span>{t.label}</span> : null}
+            </div>
+          );
+        })}
+      </div>
+      <div className="phase-tl-legend">
+        {timings.map((t) => (
+          <div key={t.phase} className={`phase-tl-item ph-${t.phase}`}>
+            <strong>{t.label}</strong>
+            <span className="mono">{fmtDur(t.seconds)}</span>
+            <em>
+              {t.timedSteps}/{t.stepCount} steps · {t.status}
+            </em>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function FailureBlock({ a, onOpen }: { a: DebugAnalysis; onOpen: (s: string) => void }) {
   const d = a.diagnosis;
   const step = a.workflow.find((w) => w.name === a.firstFailed);
@@ -411,14 +458,18 @@ function FailureBlock({ a, onOpen }: { a: DebugAnalysis; onOpen: (s: string) => 
       <p>
         Primary signal: <code>{a.firstFailed}</code>
         {step?.bestEffort ? ' (best-effort / often secondary)' : ''}
+        {step?.duration != null ? (
+          <span className="muted"> · ran {fmtDur(step.duration)}</span>
+        ) : null}
       </p>
-      {step?.failureSnippet && <pre className="log-box">{step.failureSnippet}</pre>}
-      {d.hypotheses.slice(0, 3).map((h) => (
-        <div key={h.tag} className="hyp">
-          <div className="tag">{h.tag} — hypothesis, not proven root cause</div>
-          <div dangerouslySetInnerHTML={{ __html: h.text }} />
-        </div>
-      ))}
+      {step?.failureSnippet && (
+        <>
+          <div className="muted" style={{ marginTop: 8 }}>
+            Log excerpt
+          </div>
+          <pre className="log-box">{step.failureSnippet}</pre>
+        </>
+      )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
         <button type="button" className="btn btn-primary" onClick={() => onOpen(a.firstFailed!)}>
           Open step logs
@@ -482,15 +533,9 @@ function StepCard({
               (or ci-operator has not written it). The workflow still expects it.
             </p>
           )}
-          {w.patterns.map((p) => (
-            <div key={p.category} className="hyp">
-              <div className="tag">{p.category}</div>
-              <div dangerouslySetInnerHTML={{ __html: p.hint }} />
-            </div>
-          ))}
           {w.failureSnippet && (
             <>
-              <div className="muted">Failure excerpt</div>
+              <div className="muted">Log excerpt</div>
               <pre className="log-box">{w.failureSnippet}</pre>
             </>
           )}

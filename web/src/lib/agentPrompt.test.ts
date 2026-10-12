@@ -108,6 +108,11 @@ function sample(partial?: Partial<DebugAnalysis>): DebugAnalysis {
     },
     leaseSlot: 'libvirt-s390x-vpn-1',
     progressSummary: 'Failed at upi-install-libvirt',
+    phaseTimings: [
+      { phase: 'pre', label: 'PRE', seconds: 600, timedSteps: 1, stepCount: 11, status: 'failed' },
+      { phase: 'test', label: 'TEST', seconds: 0, timedSteps: 0, stepCount: 2, status: 'pending' },
+      { phase: 'post', label: 'POST', seconds: 0, timedSteps: 0, stepCount: 5, status: 'pending' },
+    ],
   };
   return { ...base, ...partial };
 }

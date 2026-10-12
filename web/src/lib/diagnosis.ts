@@ -1,7 +1,6 @@
 import { BEST_EFFORT_STEPS, PHASE_META } from '../data/workflow';
 import { VPN_WORKFLOW_STEPS } from '../data/vpnWorkflow';
 import { STEP_INFO } from '../data/stepInfo';
-import { FAIL_PATTERNS } from '../data/failPatterns';
 import type { Diagnosis, StepResult } from '../types';
 import { fmtDur } from './gcs';
 
@@ -14,27 +13,19 @@ function phaseForStep(ref: string): keyof typeof PHASE_META | null {
   return null;
 }
 
-export function detectPatterns(log: string): { category: string; hint: string }[] {
-  const found: { category: string; hint: string }[] = [];
-  for (const p of FAIL_PATTERNS) {
-    if (p.re.test(log)) found.push({ category: p.category, hint: p.hint });
-  }
-  return found;
-}
-
-export function extractSnippet(log: string, patterns: { category: string }[]): string | null {
-  if (!log || patterns.length === 0) return null;
+/** Pull a short evidence window around the first error-ish lines (no canned hypotheses). */
+export function extractSnippet(log: string): string | null {
+  if (!log) return null;
   const lines = log.split('\n');
-  const snippets: string[] = [];
-  for (const fp of FAIL_PATTERNS) {
-    for (let i = 0; i < lines.length; i++) {
-      if (fp.re.test(lines[i])) {
-        snippets.push(lines.slice(Math.max(0, i - 1), i + 3).join('\n'));
-        if (snippets.length >= 3) return snippets.join('\n──\n');
-      }
+  const re =
+    /\b(error|failed|failure|fatal|panic|timeout|deadline exceeded|exit status [1-9])/i;
+  for (let i = 0; i < lines.length; i++) {
+    if (re.test(lines[i])) {
+      return lines.slice(Math.max(0, i - 2), Math.min(lines.length, i + 6)).join('\n');
     }
   }
-  return snippets.length > 0 ? snippets.join('\n──\n') : null;
+  const tail = lines.slice(-40).join('\n').trim();
+  return tail || null;
 }
 
 export function buildDiagnosis(input: {
@@ -84,16 +75,12 @@ export function buildDiagnosis(input: {
     d.facts.push('No step with status=failed in discovered artifact directories');
     d.nextSteps.push({ label: 'Inspect CI Operator Log', tab: 'prowlog' });
     d.nextSteps.push({ label: 'Browse artifacts', tab: 'artifacts' });
-    d.hypotheses.push({
-      tag: 'Hypothesis',
-      text: 'Failure may have occurred before multi-stage steps, or artifacts are incomplete. Check root build-log.txt.',
-    });
+    d.facts.push('Check root build-log.txt — failure may be before multi-stage steps or artifacts incomplete.');
     return d;
   }
 
   const step = input.steps[ref];
   const info = STEP_INFO[ref];
-  const pats = step?.patterns || [];
   const phaseKey = phaseForStep(ref);
   const phaseLbl = phaseKey ? PHASE_META[phaseKey].label : 'Unknown phase';
   const isBestEffort = BEST_EFFORT_STEPS.has(ref);
@@ -101,7 +88,7 @@ export function buildDiagnosis(input: {
   d.summary = isBestEffort
     ? `Primary observed failure is best-effort step ${ref} (${phaseLbl}). Treat as secondary unless install/test also failed.`
     : `Primary failure signal: step ${ref} failed during ${phaseLbl}.`;
-  d.confidence = pats.length ? 'medium' : 'low';
+  d.confidence = step?.finJson?.passed === false ? 'medium' : 'low';
   d.facts.push(`First failing step (non-best-effort preferred): ${ref}`);
   d.facts.push(`Phase: ${phaseLbl}`);
   if (step?.duration != null) d.facts.push(`Step duration (inferred): ${fmtDur(step.duration)}`);
@@ -154,16 +141,6 @@ export function buildDiagnosis(input: {
       kind: 'archive',
       primary: false,
       desc: 'Must-gather archive (if produced)',
-    });
-  }
-
-  for (const p of pats.slice(0, 4)) {
-    d.hypotheses.push({ tag: `Pattern: ${p.category}`, text: p.hint });
-  }
-  if (!pats.length) {
-    d.hypotheses.push({
-      tag: 'Insufficient pattern evidence',
-      text: 'No known FAIL_PATTERNS matched this step log. Inspect the step log before concluding a cause.',
     });
   }
 
