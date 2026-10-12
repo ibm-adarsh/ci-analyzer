@@ -123,19 +123,21 @@ export function buildAgentPrompt(a: DebugAnalysis, mode: PromptMode = 'focused')
       : a.workflow.filter((w) => w.status === 'passed').slice(-1);
 
   if (focusSteps.length) {
-    lines.push(mode === 'full' ? '## Log excerpts (expanded)' : '## Log excerpts (focused)');
+    lines.push('## Log excerpts (high-signal only)');
     for (const w of focusSteps) {
-      const excerpt = w.failureSnippet || (mode === 'full' ? w.logTail : w.logTail?.split('\n').slice(-40).join('\n'));
-      if (!excerpt || excerpt === '__REDACTED__') {
-        lines.push(`### \`${w.name}\``);
-        lines.push(excerpt === '__REDACTED__' ? '_Log redacted by Prow._' : '_No inline excerpt; open the step log URL._');
-        lines.push('');
-        continue;
-      }
+      const excerpt = w.failureSnippet;
       lines.push(`### \`${w.name}\``);
-      lines.push('```');
-      lines.push(truncate(excerpt, mode === 'full' ? 6000 : 2500));
-      lines.push('```');
+      if (w.logTail === '__REDACTED__') {
+        lines.push('_Log redacted by Prow._');
+      } else if (excerpt) {
+        lines.push('```');
+        lines.push(truncate(excerpt, mode === 'full' ? 6000 : 2500));
+        lines.push('```');
+      } else {
+        lines.push(
+          '_No high-signal excerpt auto-detected; open the step build-log.txt / junit / install log URLs above._',
+        );
+      }
       lines.push('');
     }
   }

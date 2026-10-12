@@ -74,8 +74,8 @@ function sample(partial?: Partial<DebugAnalysis>): DebugAnalysis {
         observed: true,
         duration: 600,
         patterns: [{ category: 'bootstrap', hint: 'bootstrap failed' }],
-        failureSnippet: 'level=error msg="Bootstrap failed"',
-        logTail: 'line1\nline2\nBootstrap failed\n',
+        failureSnippet: 'level=error msg="bootstrap failed to complete"',
+        logTail: 'line1\nline2\nbootstrap failed to complete\n',
         stepBase:
           'https://storage.googleapis.com/test-platform-results-public/logs/job/1/artifacts/e2e/upi-install-libvirt',
         keyArtifacts: [
@@ -127,7 +127,7 @@ describe('buildAgentPrompt', () => {
     expect(prompt).toContain('.openshift_install.log');
     expect(prompt).toContain('libvirt-s390x-vpn');
     expect(prompt).toContain('What I need from you');
-    expect(prompt).toContain('Bootstrap failed');
+    expect(prompt).toContain('bootstrap failed');
   });
 
   it('full mode includes diagnosis facts', () => {

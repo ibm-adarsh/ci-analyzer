@@ -462,23 +462,31 @@ function FailureBlock({ a, onOpen }: { a: DebugAnalysis; onOpen: (s: string) => 
           <span className="muted"> · ran {fmtDur(step.duration)}</span>
         ) : null}
       </p>
-      {step?.failureSnippet && (
-        <>
-          <div className="muted" style={{ marginTop: 8 }}>
-            Log excerpt
-          </div>
-          <pre className="log-box">{step.failureSnippet}</pre>
-        </>
-      )}
+      <p className="muted" style={{ marginTop: 6 }}>
+        Open the step log or key artifacts below — raw log dumps here are usually noise.
+      </p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-        <button type="button" className="btn btn-primary" onClick={() => onOpen(a.firstFailed!)}>
-          Open step logs
-        </button>
-        {d.evidence.slice(0, 4).map((e) => (
-          <a key={e.url} className="btn" href={e.url} target="_blank" rel="noreferrer">
-            {e.label} ↗
+        {step?.stepBase && (
+          <a
+            className="btn btn-primary"
+            href={`${step.stepBase}/build-log.txt`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open build-log.txt ↗
           </a>
-        ))}
+        )}
+        <button type="button" className="btn" onClick={() => onOpen(a.firstFailed!)}>
+          Jump to step
+        </button>
+        {d.evidence
+          .filter((e) => !e.url.endsWith('/build-log.txt'))
+          .slice(0, 4)
+          .map((e) => (
+            <a key={e.url} className="btn" href={e.url} target="_blank" rel="noreferrer">
+              {e.label} ↗
+            </a>
+          ))}
       </div>
     </section>
   );
@@ -533,30 +541,26 @@ function StepCard({
               (or ci-operator has not written it). The workflow still expects it.
             </p>
           )}
-          {w.failureSnippet && (
-            <>
-              <div className="muted">Log excerpt</div>
-              <pre className="log-box">{w.failureSnippet}</pre>
-            </>
-          )}
-          {w.logTail && w.logTail !== '__REDACTED__' && (
-            <>
-              <div className="muted">Last ~100 lines of build-log.txt</div>
-              <pre className="log-box">{w.logTail}</pre>
-            </>
+          {w.observed && (
+            <p className="muted" style={{ marginTop: 0 }}>
+              Use the log / artifact links — inline log dumps are omitted on purpose.
+            </p>
           )}
           {w.logTail === '__REDACTED__' && (
             <div className="error-banner">Log redacted by Prow.</div>
           )}
-          {w.keyArtifacts.length > 0 && (
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-              {w.keyArtifacts.map((art) => (
-                <a key={art.url} className="btn" href={art.url} target="_blank" rel="noreferrer">
-                  {art.label} ↗
-                </a>
-              ))}
-            </div>
-          )}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+            {w.stepBase && (
+              <a className="btn btn-primary" href={`${w.stepBase}/build-log.txt`} target="_blank" rel="noreferrer">
+                build-log.txt ↗
+              </a>
+            )}
+            {w.keyArtifacts.map((art) => (
+              <a key={art.url} className="btn" href={art.url} target="_blank" rel="noreferrer">
+                {art.label} ↗
+              </a>
+            ))}
+          </div>
         </div>
       )}
     </div>
