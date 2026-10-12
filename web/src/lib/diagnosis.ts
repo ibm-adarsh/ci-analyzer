@@ -1,8 +1,18 @@
-import { BEST_EFFORT_STEPS, PHASE_MAP, PHASE_META } from '../data/workflow';
+import { BEST_EFFORT_STEPS, PHASE_META } from '../data/workflow';
+import { VPN_WORKFLOW_STEPS } from '../data/vpnWorkflow';
 import { STEP_INFO } from '../data/stepInfo';
 import { FAIL_PATTERNS } from '../data/failPatterns';
 import type { Diagnosis, StepResult } from '../types';
 import { fmtDur } from './gcs';
+
+function phaseForStep(ref: string): keyof typeof PHASE_META | null {
+  const def = VPN_WORKFLOW_STEPS.find((s) => s.name === ref);
+  if (def) return def.phase;
+  if (ref.includes('gather') || ref.includes('cleanup-post') || ref.includes('kdump-gather')) return 'post';
+  if (ref.includes('test') || ref.includes('e2e')) return 'test';
+  if (ref.includes('install') || ref.includes('conf') || ref.includes('cleanup-pre')) return 'pre';
+  return null;
+}
 
 export function detectPatterns(log: string): { category: string; hint: string }[] {
   const found: { category: string; hint: string }[] = [];
@@ -84,8 +94,8 @@ export function buildDiagnosis(input: {
   const step = input.steps[ref];
   const info = STEP_INFO[ref];
   const pats = step?.patterns || [];
-  const phase = Object.entries(PHASE_MAP).find(([, refs]) => refs.includes(ref));
-  const phaseLbl = phase ? PHASE_META[phase[0] as keyof typeof PHASE_META].label : 'Unknown phase';
+  const phaseKey = phaseForStep(ref);
+  const phaseLbl = phaseKey ? PHASE_META[phaseKey].label : 'Unknown phase';
   const isBestEffort = BEST_EFFORT_STEPS.has(ref);
 
   d.summary = isBestEffort

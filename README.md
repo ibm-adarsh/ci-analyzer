@@ -18,6 +18,7 @@ This is **not** a fleet dashboard. One job link → workflow status, logs, artif
 | **Failure focus** | First non-best-effort failed step, log excerpt, pattern hypotheses (labeled, not claimed root cause) |
 | **Context** | Cluster profile, topology, OCP/BRANCH, test type, lease → LPAR, ci-operator config link |
 | **Release** | Nightly tag + tests/install image pullspecs (from root log or `artifacts/release` ImageStream) |
+| **AI agent prompt** | Copy-paste brief (focused or full) with job URL, failed-step artifact links, workflow status, log excerpts, and follow-up instructions for any AI agent |
 
 ### RUNNING job example (the bug you hit)
 

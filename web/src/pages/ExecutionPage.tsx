@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { analyzeExecution, type DebugAnalysis, type WorkflowStepView } from '../lib/analyze';
+import { buildAgentPrompt, type PromptMode } from '../lib/agentPrompt';
 import { fmtDur } from '../lib/gcs';
 import { releaseBrowserLinks } from '../lib/release';
 import { parseExecutionRoute } from '../lib/url';
 import { WORKFLOW_SOURCE } from '../data/vpnWorkflow';
 import { StatusBadge } from '../components/StatusBadge';
 import { resolveLpar } from '../lib/lparResolve';
+
+type PageTab = 'debug' | 'prompt';
 
 export function ExecutionPage() {
   const { bucketEnc = '', pathEnc = '' } = useParams();
@@ -16,6 +19,7 @@ export function ExecutionPage() {
   const [pct, setPct] = useState(0);
   const [label, setLabel] = useState('Starting…');
   const [open, setOpen] = useState<string | null>(null);
+  const [tab, setTab] = useState<PageTab>('debug');
 
   useEffect(() => {
     if (!parsed) {
@@ -122,168 +126,262 @@ export function ExecutionPage() {
             <a className="btn btn-primary" href={a.raw} target="_blank" rel="noreferrer">
               Open in Prow ↗
             </a>
-            {a.firstFailed && (
+            {a.firstFailed && tab === 'debug' && (
               <button type="button" className="btn" onClick={() => setOpen(a.firstFailed)}>
                 Jump to failed step
               </button>
             )}
-            {a.currentStep && a.result === 'RUNNING' && (
+            {a.currentStep && a.result === 'RUNNING' && tab === 'debug' && (
               <button type="button" className="btn" onClick={() => setOpen(a.currentStep)}>
                 Jump to current step
               </button>
             )}
+            <button type="button" className="btn" onClick={() => setTab('prompt')}>
+              Copy AI prompt
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Context strip — what developers always need */}
-      <section className="panel" style={{ marginBottom: 12 }}>
-        <h2>Execution context</h2>
-        <div className="stat-row">
-          <div className="stat">
-            <b>{passed}</b>
-            <span>Passed</span>
-          </div>
-          <div className="stat">
-            <b style={{ color: 'var(--red)' }}>{failed}</b>
-            <span>Failed</span>
-          </div>
-          <div className="stat">
-            <b style={{ color: 'var(--accent)' }}>{pending}</b>
-            <span>Pending / current</span>
-          </div>
-          <div className="stat">
-            <b style={{ fontSize: 14 }}>{dur}</b>
-            <span>Duration</span>
-          </div>
-        </div>
-        <div className="kv" style={{ marginTop: 8 }}>
-          <span className="k">Started</span>
-          <span className="v">{start}</span>
-          <span className="k">Cluster profile</span>
-          <span className="v mono">{a.meta.profile}</span>
-          <span className="k">Workflow</span>
-          <span className="v">
-            <code>{a.meta.workflow || WORKFLOW_SOURCE.name}</code>{' '}
-            <a href={WORKFLOW_SOURCE.yaml} target="_blank" rel="noreferrer">
-              source ↗
-            </a>{' '}
-            <a href={WORKFLOW_SOURCE.stepsCi} target="_blank" rel="noreferrer">
-              steps.ci ↗
-            </a>
-          </span>
-          <span className="k">Topology</span>
-          <span className="v">{a.meta.topology}</span>
-          <span className="k">OCP / BRANCH</span>
-          <span className="v mono">{a.meta.ocpVersion || '—'}{a.meta.fromVersion ? ` (upgrade from ${a.meta.fromVersion})` : ''}</span>
-          <span className="k">Test type</span>
-          <span className="v">{a.meta.testType}{a.meta.fips ? ' · FIPS' : ''}{a.meta.techPreview ? ' · TechPreview' : ''}</span>
-          <span className="k">Test subdir</span>
-          <span className="v mono">{a.testSubdir || '—'}</span>
-          <span className="k">Lease</span>
-          <span className="v mono">
-            {a.leaseSlot || '— (root build-log not available yet)'}
-            {lpar ? ` → ${lpar.lpar} · ${lpar.qemuUri}` : ''}
-          </span>
-          <span className="k">Release build</span>
-          <span className="v">
-            {a.release?.tag ? (
-              <>
-                <code>{a.release.tag}</code>
-                {a.release.createdAt && (
-                  <span className="muted"> · created {a.release.createdAt}</span>
+      <nav className="tabs" aria-label="Job views">
+        <button
+          type="button"
+          className={tab === 'debug' ? 'tab active' : 'tab'}
+          onClick={() => setTab('debug')}
+        >
+          Debug view
+        </button>
+        <button
+          type="button"
+          className={tab === 'prompt' ? 'tab active' : 'tab'}
+          onClick={() => setTab('prompt')}
+        >
+          AI agent prompt
+        </button>
+      </nav>
+
+      {tab === 'prompt' ? (
+        <AgentPromptPanel a={a} />
+      ) : (
+        <>
+          <section className="panel" style={{ marginBottom: 12 }}>
+            <h2>Execution context</h2>
+            <div className="stat-row">
+              <div className="stat">
+                <b>{passed}</b>
+                <span>Passed</span>
+              </div>
+              <div className="stat">
+                <b style={{ color: 'var(--red)' }}>{failed}</b>
+                <span>Failed</span>
+              </div>
+              <div className="stat">
+                <b style={{ color: 'var(--accent)' }}>{pending}</b>
+                <span>Pending / current</span>
+              </div>
+              <div className="stat">
+                <b style={{ fontSize: 14 }}>{dur}</b>
+                <span>Duration</span>
+              </div>
+            </div>
+            <div className="kv" style={{ marginTop: 8 }}>
+              <span className="k">Started</span>
+              <span className="v">{start}</span>
+              <span className="k">Cluster profile</span>
+              <span className="v mono">{a.meta.profile}</span>
+              <span className="k">Workflow</span>
+              <span className="v">
+                <code>{a.meta.workflow || WORKFLOW_SOURCE.name}</code>{' '}
+                <a href={WORKFLOW_SOURCE.yaml} target="_blank" rel="noreferrer">
+                  source ↗
+                </a>{' '}
+                <a href={WORKFLOW_SOURCE.stepsCi} target="_blank" rel="noreferrer">
+                  steps.ci ↗
+                </a>
+              </span>
+              <span className="k">Topology</span>
+              <span className="v">{a.meta.topology}</span>
+              <span className="k">OCP / BRANCH</span>
+              <span className="v mono">
+                {a.meta.ocpVersion || '—'}
+                {a.meta.fromVersion ? ` (upgrade from ${a.meta.fromVersion})` : ''}
+              </span>
+              <span className="k">Test type</span>
+              <span className="v">
+                {a.meta.testType}
+                {a.meta.fips ? ' · FIPS' : ''}
+                {a.meta.techPreview ? ' · TechPreview' : ''}
+              </span>
+              <span className="k">Test subdir</span>
+              <span className="v mono">{a.testSubdir || '—'}</span>
+              <span className="k">Lease</span>
+              <span className="v mono">
+                {a.leaseSlot || '— (root build-log not available yet)'}
+                {lpar ? ` → ${lpar.lpar} · ${lpar.qemuUri}` : ''}
+              </span>
+              <span className="k">Release build</span>
+              <span className="v">
+                {a.release?.tag ? (
+                  <>
+                    <code>{a.release.tag}</code>
+                    {a.release.createdAt && (
+                      <span className="muted"> · created {a.release.createdAt}</span>
+                    )}
+                    <span className="muted"> · from {a.release.source}</span>
+                    <div style={{ marginTop: 4, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {releaseLinks.map((l) => (
+                        <a key={l.url} className="btn" href={l.url} target="_blank" rel="noreferrer">
+                          {l.label} ↗
+                        </a>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <span className="muted">
+                    Not found yet (common while job is early / root log missing)
+                  </span>
                 )}
-                <span className="muted"> · from {a.release.source}</span>
-                <div style={{ marginTop: 4, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {releaseLinks.map((l) => (
-                    <a key={l.url} className="btn" href={l.url} target="_blank" rel="noreferrer">
-                      {l.label} ↗
-                    </a>
+              </span>
+              {a.release?.pullSpec && (
+                <>
+                  <span className="k">Tests image</span>
+                  <span className="v mono" style={{ fontSize: 11 }}>
+                    {a.release.pullSpec}
+                  </span>
+                </>
+              )}
+              {a.release?.installTarget && (
+                <>
+                  <span className="k">Install image</span>
+                  <span className="v mono" style={{ fontSize: 11 }}>
+                    {a.release.installTarget}
+                  </span>
+                </>
+              )}
+              <span className="k">ci-operator config</span>
+              <span className="v">
+                {a.configLinks.variant ? (
+                  <a
+                    href={a.configLinks.links.find((l) => l.label.includes('ci-operator config'))?.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {a.configLinks.org}/{a.configLinks.repo} __{a.configLinks.variant}.yaml ↗
+                  </a>
+                ) : (
+                  <span className="muted">variant unresolved</span>
+                )}
+              </span>
+            </div>
+          </section>
+
+          {a.result === 'FAILED' && a.firstFailed && <FailureBlock a={a} onOpen={setOpen} />}
+
+          <section className="panel">
+            <h2>
+              Workflow steps{' '}
+              <span className="muted" style={{ fontWeight: 500 }}>
+                (configured {WORKFLOW_SOURCE.name} · pending = no artifact dir yet)
+              </span>
+            </h2>
+            {(['pre', 'test', 'post'] as const).map((ph) => {
+              const group = a.workflow.filter((w) => w.phase === ph);
+              if (!group.length) return null;
+              return (
+                <div key={ph} style={{ marginBottom: 16 }}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: '0.06em',
+                      color: 'var(--muted)',
+                      marginBottom: 8,
+                    }}
+                  >
+                    {ph.toUpperCase()} · {a.phaseStatus[ph]}
+                  </div>
+                  {group.map((w) => (
+                    <StepCard
+                      key={w.name}
+                      w={w}
+                      open={open === w.name}
+                      onToggle={() => setOpen(open === w.name ? null : w.name)}
+                    />
                   ))}
                 </div>
-              </>
-            ) : (
-              <span className="muted">Not found yet (common while job is early / root log missing)</span>
-            )}
-          </span>
-          {a.release?.pullSpec && (
-            <>
-              <span className="k">Tests image</span>
-              <span className="v mono" style={{ fontSize: 11 }}>
-                {a.release.pullSpec}
-              </span>
-            </>
-          )}
-          {a.release?.installTarget && (
-            <>
-              <span className="k">Install image</span>
-              <span className="v mono" style={{ fontSize: 11 }}>
-                {a.release.installTarget}
-              </span>
-            </>
-          )}
-          <span className="k">ci-operator config</span>
-          <span className="v">
-            {a.configLinks.variant ? (
-              <a
-                href={a.configLinks.links.find((l) => l.label.includes('ci-operator config'))?.url}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {a.configLinks.org}/{a.configLinks.repo} __{a.configLinks.variant}.yaml ↗
-              </a>
-            ) : (
-              <span className="muted">variant unresolved</span>
-            )}
-          </span>
-        </div>
-      </section>
+              );
+            })}
+          </section>
 
-      {/* Failure / investigate block */}
-      {a.result === 'FAILED' && a.firstFailed && (
-        <FailureBlock a={a} onOpen={setOpen} />
+          <EnvPanel a={a} />
+        </>
       )}
-
-      {/* Workflow timeline — configured + observed */}
-      <section className="panel">
-        <h2>
-          Workflow steps{' '}
-          <span className="muted" style={{ fontWeight: 500 }}>
-            (configured {WORKFLOW_SOURCE.name} · pending = no artifact dir yet)
-          </span>
-        </h2>
-        {(['pre', 'test', 'post'] as const).map((ph) => {
-          const group = a.workflow.filter((w) => w.phase === ph);
-          if (!group.length) return null;
-          return (
-            <div key={ph} style={{ marginBottom: 16 }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: '0.06em',
-                  color: 'var(--muted)',
-                  marginBottom: 8,
-                }}
-              >
-                {ph.toUpperCase()} · {a.phaseStatus[ph]}
-              </div>
-              {group.map((w) => (
-                <StepCard
-                  key={w.name}
-                  w={w}
-                  open={open === w.name}
-                  onToggle={() => setOpen(open === w.name ? null : w.name)}
-                />
-              ))}
-            </div>
-          );
-        })}
-      </section>
-
-      {/* Env defaults from VPN jobs */}
-      <EnvPanel a={a} />
     </>
+  );
+}
+
+function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
+  const [mode, setMode] = useState<PromptMode>('focused');
+  const [copied, setCopied] = useState(false);
+  const prompt = useMemo(() => buildAgentPrompt(a, mode), [a, mode]);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for restricted clipboard
+      const ta = document.createElement('textarea');
+      ta.value = prompt;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    }
+  }
+
+  return (
+    <section className="panel">
+      <h2>AI agent prompt</h2>
+      <p className="muted">
+        Copy this into Cursor, ChatGPT, Claude, or any agent. It includes the Prow job link, failed
+        steps with artifact URLs, workflow status, release/context, and log excerpts so the agent can
+        keep investigating on its own.
+      </p>
+      <div className="prompt-toolbar">
+        <div className="seg">
+          <button
+            type="button"
+            className={mode === 'focused' ? 'active' : ''}
+            onClick={() => setMode('focused')}
+          >
+            Focused
+          </button>
+          <button
+            type="button"
+            className={mode === 'full' ? 'active' : ''}
+            onClick={() => setMode('full')}
+          >
+            Full context
+          </button>
+        </div>
+        <button type="button" className="btn btn-primary" onClick={() => void copy()}>
+          {copied ? 'Copied ✓' : 'Copy prompt'}
+        </button>
+      </div>
+      <pre className="prompt-box" tabIndex={0}>
+        {prompt}
+      </pre>
+      <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+        {mode === 'focused'
+          ? 'Focused mode: shorter excerpts around failures / current step.'
+          : 'Full mode: longer log excerpts plus diagnosis facts.'}{' '}
+        ~{prompt.length.toLocaleString()} characters.
+      </p>
+    </section>
   );
 }
 

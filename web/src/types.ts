@@ -118,29 +118,6 @@ export interface Analysis {
   configLinks: ConfigLinks;
 }
 
-export interface JobIndexEntry {
-  jobName: string;
-  buildId: string;
-  gcsPath: string;
-  prowUrl: string;
-  result: JobResult;
-  archClass: ArchClass;
-  startedAt: number | null;
-  finishedAt: number | null;
-  durationSec: number | null;
-  variant: string | null;
-  profile: string | null;
-  ocpVersion: string | null;
-}
-
-export interface JobIndex {
-  generatedAt: string;
-  bucket: string;
-  source: string;
-  executions: JobIndexEntry[];
-  jobNames: string[];
-}
-
 export interface ArtifactEntry {
   name: string;
   fullPath: string;

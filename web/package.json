@@ -9,9 +9,7 @@
     "preview": "vite preview --base /ci-analyzer/",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "oxlint src",
-    "generate:index": "node scripts/generate-job-index.mjs",
-    "prebuild": "node scripts/ensure-job-index.mjs"
+    "lint": "oxlint src"
   },
   "dependencies": {
     "react": "^19.2.8",
