@@ -1,7 +1,7 @@
 import { BEST_EFFORT_STEPS } from '../data/workflow';
 import { HETERO_ALIASES, VPN_WORKFLOW_STEPS, workflowForJob } from '../data/vpnWorkflow';
 import type { Analysis, JobResult, ParsedUrl, StepResult, StepStatus } from '../types';
-import { buildDiagnosis, extractSnippet } from './diagnosis';
+import { buildDiagnosis } from './diagnosis';
 import { fetchJson, fetchText, listPrefix } from './gcs';
 import { buildConfigLinks, enrichMetaFromProwjob, parseJobMeta } from './meta';
 import {
@@ -104,8 +104,6 @@ async function fetchAllSteps(
       : logText === '__REDACTED__'
         ? '__REDACTED__'
         : null;
-    const failureSnippet = status === 'failed' ? extractSnippet(safeLog) : null;
-
     results[stepName] = {
       status,
       duration,
@@ -113,7 +111,7 @@ async function fetchAllSteps(
       logTail,
       logText: safeLog || null,
       patterns: [],
-      failureSnippet,
+      failureSnippet: null,
       stepBase,
     };
   }

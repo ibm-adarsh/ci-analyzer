@@ -218,8 +218,6 @@ export function ExecutionPage() {
             <PhaseTimeline timings={a.phaseTimings} />
           </section>
 
-          {a.result === 'FAILED' && a.firstFailed && <FailureBlock a={a} onOpen={setOpen} />}
-
           <section className="dbg-steps-panel">
             <div className="dbg-section-head">
               <h2>Workflow steps</h2>
@@ -474,47 +472,6 @@ function PhaseTimeline({ timings }: { timings: DebugAnalysis['phaseTimings'] }) 
         ))}
       </div>
     </div>
-  );
-}
-
-function FailureBlock({ a, onOpen }: { a: DebugAnalysis; onOpen: (s: string) => void }) {
-  const d = a.diagnosis;
-  const step = a.workflow.find((w) => w.name === a.firstFailed);
-  return (
-    <section className="dbg-fail">
-      <div className="dbg-fail-label">Primary failure</div>
-      <h2>
-        <code>{a.firstFailed}</code>
-      </h2>
-      <p>
-        {step?.bestEffort ? 'Best-effort step — often secondary. ' : null}
-        {step?.duration != null ? <>Ran {fmtDur(step.duration)}. </> : null}
-        Open the step log or artifacts to investigate.
-      </p>
-      <div className="dbg-fail-actions">
-        {step?.stepBase && (
-          <a
-            className="btn btn-primary"
-            href={`${step.stepBase}/build-log.txt`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            build-log.txt
-          </a>
-        )}
-        <button type="button" className="btn" onClick={() => onOpen(a.firstFailed!)}>
-          Jump to step
-        </button>
-        {d.evidence
-          .filter((e) => !e.url.endsWith('/build-log.txt'))
-          .slice(0, 4)
-          .map((e) => (
-            <a key={e.url} className="btn" href={e.url} target="_blank" rel="noreferrer">
-              {e.label}
-            </a>
-          ))}
-      </div>
-    </section>
   );
 }
 
