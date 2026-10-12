@@ -10,12 +10,6 @@ export type ArchClass =
 
 export type Confidence = 'high' | 'medium' | 'low' | 'none';
 
-export interface FailPattern {
-  re: RegExp;
-  category: string;
-  hint: string;
-}
-
 export interface StepInfo {
   desc: string;
   hints: { t: string; cls?: string }[];
