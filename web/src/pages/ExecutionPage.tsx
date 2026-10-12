@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { analyzeExecution, type DebugAnalysis, type WorkflowStepView } from '../lib/analyze';
-import { buildAgentPrompt, type PromptMode } from '../lib/agentPrompt';
+import { buildAgentPrompt } from '../lib/agentPrompt';
 import { fmtDur } from '../lib/gcs';
 import { releaseBrowserLinks } from '../lib/release';
 import { parseExecutionRoute } from '../lib/url';
@@ -427,9 +427,8 @@ function Detail({ label, value }: { label: string; value: ReactNode }) {
 }
 
 function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
-  const [mode, setMode] = useState<PromptMode>('focused');
   const [copied, setCopied] = useState(false);
-  const prompt = useMemo(() => buildAgentPrompt(a, mode), [a, mode]);
+  const prompt = useMemo(() => buildAgentPrompt(a), [a]);
 
   async function copy() {
     try {
@@ -452,26 +451,10 @@ function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
     <section className="panel">
       <h2>AI agent prompt</h2>
       <p className="muted">
-        Copy into Cursor or any agent. Plain-text brief with job context, failed-step artifact URLs,
+        Copy into IBM BOB or any agent. Job context, workflow status, failed-step artifact URLs,
         phase timings, and the last 80 lines of each failed step log.
       </p>
       <div className="prompt-toolbar">
-        <div className="seg">
-          <button
-            type="button"
-            className={mode === 'focused' ? 'active' : ''}
-            onClick={() => setMode('focused')}
-          >
-            Focused
-          </button>
-          <button
-            type="button"
-            className={mode === 'full' ? 'active' : ''}
-            onClick={() => setMode('full')}
-          >
-            Full context
-          </button>
-        </div>
         <button type="button" className="btn btn-primary" onClick={() => void copy()}>
           {copied ? 'Copied ✓' : 'Copy prompt'}
         </button>

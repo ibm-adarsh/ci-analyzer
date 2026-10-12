@@ -156,8 +156,8 @@ function sample(partial?: Partial<DebugAnalysis>): DebugAnalysis {
 }
 
 describe('buildAgentPrompt', () => {
-  it('is plain text with failed-step artifacts and last 80 log lines', () => {
-    const prompt = buildAgentPrompt(sample(), 'focused');
+  it('is plain text with full context for IBM BOB', () => {
+    const prompt = buildAgentPrompt(sample());
     expect(prompt).toContain('Please analyse this IBM Z');
     expect(prompt).toContain('prow.ci.openshift.org');
     expect(prompt).toContain('upi-install-libvirt');
@@ -167,17 +167,13 @@ describe('buildAgentPrompt', () => {
     expect(prompt).toContain('bootstrap failed to complete');
     expect(prompt).not.toContain('line-1\n'); // truncated head of 90-line log
     expect(prompt).toContain('line-12\n'); // within last 80 of 91 lines
+    expect(prompt).toContain('Workflow status');
+    expect(prompt).toContain('Diagnosis facts');
+    expect(prompt).toContain('First failing step: upi-install-libvirt');
+    expect(prompt).toContain('IBM BOB');
     expect(prompt).not.toMatch(/^#/m);
     expect(prompt).not.toContain('##');
     expect(prompt).not.toContain('**');
     expect(prompt).toContain('What I need from you');
-  });
-
-  it('full mode includes workflow status and diagnosis facts', () => {
-    const prompt = buildAgentPrompt(sample(), 'full');
-    expect(prompt).toContain('Workflow status');
-    expect(prompt).toContain('Diagnosis facts');
-    expect(prompt).toContain('First failing step: upi-install-libvirt');
-    expect(prompt).not.toContain('##');
   });
 });
