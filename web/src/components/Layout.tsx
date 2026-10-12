@@ -1,7 +1,9 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const { pathname } = useLocation();
+  const onGuide = pathname.startsWith('/guide');
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     try {
       return (localStorage.getItem('ibmz_theme') as 'dark' | 'light') || 'dark';
@@ -30,7 +32,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </Link>
         <div className="topbar-actions">
-          <Link to="/guide" className="btn">
+          <Link to="/guide" className={onGuide ? 'btn btn-primary' : 'btn'}>
             Workflow guide
           </Link>
           <button
