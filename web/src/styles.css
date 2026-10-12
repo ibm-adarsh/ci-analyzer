@@ -1250,7 +1250,7 @@ select {
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--bg) 88%, #000);
   color: var(--text);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-family: var(--mono);
   font-size: 0.78rem;
   line-height: 1.45;
   white-space: pre-wrap;
