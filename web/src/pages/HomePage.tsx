@@ -19,17 +19,26 @@ function loadRecent(): RecentItem[] {
   }
 }
 
+function shortJob(name: string): string {
+  return name
+    .replace(/^periodic-ci-openshift-multiarch-main-nightly-/, '')
+    .replace(/^periodic-ci-openshift-multiarch-master-nightly-/, '');
+}
+
 const EXAMPLES = [
   {
-    label: 'Failed upgrade z-z',
+    label: 'Failed upgrade',
+    hint: '5.0 ← 4.22 · z-z',
     url: 'https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-openshift-multiarch-main-nightly-5.0-upgrade-from-nightly-4.22-ocp-ovn-remote-libvirt-multi-z-z/2107456138294333440',
   },
   {
-    label: 'Passed e2e-serial z-z',
+    label: 'Passed serial',
+    hint: '5.0 · e2e-serial',
     url: 'https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-openshift-multiarch-main-nightly-5.0-ocp-e2e-serial-ovn-remote-libvirt-multi-z-z/2107441095997657088',
   },
   {
-    label: 'Failed fips z-z',
+    label: 'Failed FIPS',
+    hint: '4.23 · techpreview',
     url: 'https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-openshift-multiarch-main-nightly-4.23-ocp-fips-ovn-techpreview-multi-z-z/2107396006764089344',
   },
 ];
@@ -47,9 +56,7 @@ export function HomePage() {
   const go = (raw: string) => {
     const parsed = parseProwUrl(raw);
     if (!parsed) {
-      setErr(
-        'Paste a prow.ci.openshift.org job URL, e.g. …/view/gs/test-platform-results-public/logs/<job>/<buildId>',
-      );
+      setErr('Paste a prow.ci.openshift.org job URL (…/view/gs/…/logs/<job>/<buildId>).');
       return;
     }
     setErr(null);
@@ -69,67 +76,60 @@ export function HomePage() {
   };
 
   return (
-    <div style={{ maxWidth: 820, margin: '0 auto' }}>
-      <section className="panel" style={{ padding: '28px 24px' }}>
-        <h2 style={{ fontSize: 22, marginBottom: 6 }}>Debug an IBM Z CI job</h2>
-        <p className="muted" style={{ marginTop: 0, lineHeight: 1.6 }}>
-          Paste a Prow job link. The workbench loads the configured{' '}
-          <code>openshift-e2e-libvirt-vpn</code> workflow (vpn / vpn-oz profiles), shows which steps
-          passed, failed, or are still pending, and jumps you to logs, artifacts, release build, and
-          env — so you do not have to dig through GCS by hand.
+    <div className="home">
+      <section className="home-hero">
+        <p className="home-kicker">IBM Z · OpenShift CI</p>
+        <h1>
+          Paste a Prow link.
+          <em> Get the debug path.</em>
+        </h1>
+        <p className="home-lead">
+          Workflow status, phase timing, logs, and release context for libvirt s390x jobs — without
+          digging GCS by hand.
         </p>
 
-        <label className="muted" style={{ display: 'block', marginTop: 18, marginBottom: 6 }}>
-          Prow job URL
-        </label>
-        <div className="search-row">
-          <input
-            autoFocus
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && go(url)}
-            placeholder="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/…/BUILD_ID"
-            spellCheck={false}
-            style={{ fontSize: 14, padding: '12px 14px' }}
-          />
-          <button type="button" className="btn btn-primary" onClick={() => go(url)}>
-            Debug
-          </button>
+        <div className="home-paste">
+          <label htmlFor="prow-url">Prow job URL</label>
+          <div className="home-paste-row">
+            <input
+              id="prow-url"
+              autoFocus
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && go(url)}
+              placeholder="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/…"
+              spellCheck={false}
+            />
+            <button type="button" className="btn btn-primary home-go" onClick={() => go(url)}>
+              Debug
+            </button>
+          </div>
+          {err && <div className="error-banner">{err}</div>}
         </div>
-        {err && <div className="error-banner">{err}</div>}
 
-        <div style={{ marginTop: 16 }}>
-          <div className="muted" style={{ marginBottom: 8 }}>
-            Try an example
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {EXAMPLES.map((ex) => (
-              <button key={ex.label} type="button" className="chip" onClick={() => go(ex.url)}>
-                {ex.label}
-              </button>
-            ))}
-          </div>
+        <div className="home-examples">
+          <span>Try</span>
+          {EXAMPLES.map((ex) => (
+            <button key={ex.label} type="button" className="home-ex" onClick={() => go(ex.url)}>
+              <strong>{ex.label}</strong>
+              <em>{ex.hint}</em>
+            </button>
+          ))}
         </div>
       </section>
 
       {recent.length > 0 && (
-        <section className="panel" style={{ marginTop: 14 }}>
-          <h2>Recent (this browser)</h2>
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+        <section className="home-recent" aria-label="Recent jobs">
+          <div className="home-recent-h">
+            <h2>Recent</h2>
+            <span>This browser only</span>
+          </div>
+          <ul>
             {recent.map((r) => (
-              <li key={r.url} style={{ marginBottom: 8 }}>
-                <button
-                  type="button"
-                  className="btn"
-                  style={{ width: '100%', textAlign: 'left' }}
-                  onClick={() => go(r.url)}
-                >
-                  <span className="mono" style={{ fontSize: 12 }}>
-                    {r.jobName.replace(/^periodic-ci-openshift-multiarch-main-nightly-/, '…/')}
-                  </span>
-                  <span className="muted" style={{ marginLeft: 8, fontSize: 11 }}>
-                    {r.buildId.slice(-10)}
-                  </span>
+              <li key={r.url}>
+                <button type="button" onClick={() => go(r.url)}>
+                  <span className="home-recent-name">{shortJob(r.jobName)}</span>
+                  <span className="home-recent-id mono">{r.buildId.slice(-8)}</span>
                 </button>
               </li>
             ))}
@@ -137,19 +137,17 @@ export function HomePage() {
         </section>
       )}
 
-      <p className="muted" style={{ marginTop: 16, fontSize: 12, lineHeight: 1.55 }}>
-        Focused on <strong>libvirt-s390x-vpn</strong> (and related Z profiles) with{' '}
-        <code>openshift-e2e-libvirt-vpn</code> from{' '}
+      <footer className="home-foot">
+        <Link to="/guide">How the workflow works</Link>
+        <span aria-hidden>·</span>
         <a
-          href="https://github.com/openshift/release/blob/main/ci-operator/step-registry/openshift/e2e/libvirt/vpn/openshift-e2e-libvirt-vpn-workflow.yaml"
+          href="https://steps.ci.openshift.org/workflow/openshift-e2e-libvirt-vpn"
           target="_blank"
           rel="noreferrer"
         >
-          openshift/release
+          openshift-e2e-libvirt-vpn
         </a>
-        . New to Z CI? Read the{' '}
-        <Link to="/guide">workflow guide</Link> (steps, install mapping, environments, 4.13→5.x).
-      </p>
+      </footer>
     </div>
   );
 }

@@ -1,9 +1,10 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
-export function Layout({ children }: { children: React.ReactNode }) {
+export function Layout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const onGuide = pathname.startsWith('/guide');
+  const onHome = pathname === '/' || pathname === '';
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     try {
       return (localStorage.getItem('ibmz_theme') as 'dark' | 'light') || 'dark';
@@ -22,29 +23,35 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }, [theme]);
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${onHome ? ' is-home' : ''}`}>
       <header className="topbar">
-        <Link to="/" className="brand" style={{ textDecoration: 'none', color: 'inherit' }}>
-          <div className="brand-mark">Z</div>
-          <div>
-            <h1>IBM Z · Job Debugger</h1>
-            <p>Paste a Prow URL · vpn / vpn-oz · libvirt workflow</p>
-          </div>
+        <Link to="/" className="brand">
+          <span className="brand-mark" aria-hidden>
+            Z
+          </span>
+          <span className="brand-text">
+            <span className="brand-name">IBM Z</span>
+            <span className="brand-sep">Job Debugger</span>
+          </span>
         </Link>
-        <div className="topbar-actions">
-          <Link to="/guide" className={onGuide ? 'btn btn-primary' : 'btn'}>
-            Workflow guide
+        <nav className="topbar-nav" aria-label="Primary">
+          <Link to="/" className={!onGuide ? 'nav-link on' : 'nav-link'}>
+            Debug
+          </Link>
+          <Link to="/guide" className={onGuide ? 'nav-link on' : 'nav-link'}>
+            Guide
           </Link>
           <button
             type="button"
-            className="btn"
+            className="nav-theme"
             onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+            aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
           >
             {theme === 'dark' ? 'Light' : 'Dark'}
           </button>
-        </div>
+        </nav>
       </header>
-      {children}
+      <main className="app-main">{children}</main>
     </div>
   );
 }
