@@ -8,6 +8,9 @@
   --text: #e8eef6;
   --text2: #b4c0d0;
   --muted: #7a8799;
+  --label: #8fa0b5;
+  --value: #f2f6fc;
+  --value-code: #b8d4ff;
   --accent: #4c9aff;
   --accent-dim: rgba(76, 154, 255, 0.12);
   --green: #3dd68c;
@@ -32,6 +35,9 @@
   --text: #1a2330;
   --text2: #3d4a5c;
   --muted: #6b7789;
+  --label: #5a6b82;
+  --value: #122033;
+  --value-code: #0a4bb8;
   --accent: #0b5fff;
   --accent-dim: rgba(11, 95, 255, 0.08);
   --green: #0f7b46;
@@ -1329,7 +1335,7 @@ select {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--accent);
 }
 .dbg-fact dl {
   margin: 0;
@@ -1340,25 +1346,35 @@ select {
   min-width: 0;
 }
 .dbg-fact dt {
-  margin: 0 0 3px;
-  font-size: 0.72rem;
+  margin: 0 0 4px;
+  font-size: 0.7rem;
   font-weight: 650;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--label);
 }
 .dbg-fact dd {
   margin: 0;
   font-size: 0.9rem;
-  color: var(--text);
+  font-weight: 550;
+  color: var(--value);
   line-height: 1.45;
 }
 .dbg-fact dd code {
   font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--value-code);
+  background: var(--accent-dim);
+  padding: 1px 6px;
+  border-radius: 4px;
 }
 .dbg-fact-meta {
   margin-top: 4px;
   font-size: 0.75rem;
+  font-weight: 450;
+  color: var(--muted);
+}
+.dbg-fact-meta.mono {
   color: var(--muted);
 }
 .dbg-fact-links {
@@ -1379,13 +1395,15 @@ select {
   font-size: 1rem;
   font-weight: 700;
   letter-spacing: -0.01em;
+  color: var(--value);
 }
 .dbg-lease-path em {
   font-style: normal;
   font-size: 0.75rem;
+  color: var(--muted);
 }
 .dbg-lease-arrow {
-  color: var(--muted);
+  color: var(--label);
 }
 .dbg-break {
   word-break: break-all;
