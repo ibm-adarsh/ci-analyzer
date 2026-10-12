@@ -3,13 +3,13 @@ import { WorkflowGuideView } from '../components/WorkflowGuideView';
 
 export function WorkflowGuidePage() {
   return (
-    <>
-      <div style={{ marginBottom: 12 }}>
+    <div className="wg-page">
+      <div style={{ marginBottom: 8 }}>
         <Link to="/" className="muted">
           ← Back to debugger
         </Link>
       </div>
       <WorkflowGuideView />
-    </>
+    </div>
   );
 }
