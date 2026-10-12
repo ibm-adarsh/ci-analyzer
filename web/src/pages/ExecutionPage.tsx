@@ -503,6 +503,22 @@ function PhaseTimeline({ timings }: { timings: DebugAnalysis['phaseTimings'] }) 
   );
 }
 
+function stepArtifactLinks(w: WorkflowStepView): { label: string; url: string; primary?: boolean }[] {
+  const logUrl = w.stepBase ? `${w.stepBase}/build-log.txt` : null;
+  const seen = new Set<string>();
+  const out: { label: string; url: string; primary?: boolean }[] = [];
+  if (logUrl) {
+    seen.add(logUrl);
+    out.push({ label: 'build-log.txt', url: logUrl, primary: true });
+  }
+  for (const art of w.keyArtifacts) {
+    if (seen.has(art.url)) continue;
+    seen.add(art.url);
+    out.push(art);
+  }
+  return out;
+}
+
 function StepCard({
   w,
   open,
@@ -512,6 +528,10 @@ function StepCard({
   open: boolean;
   onToggle: () => void;
 }) {
+  const arts = stepArtifactLinks(w);
+  const hasLog =
+    !!w.logTail && w.logTail !== '__REDACTED__' && w.logTail.trim().length > 0;
+
   return (
     <div
       className={`dbg-step st-${w.status}${open ? ' open' : ''}${w.observed ? '' : ' pending-row'}`}
@@ -532,27 +552,35 @@ function StepCard({
       {open && (
         <div className="dbg-step-body">
           {!w.observed ? (
-            <p className="muted">
-              No artifact directory yet (not started, or not flushed).
-            </p>
-          ) : (
-            <p className="muted">Open logs / artifacts — inline dumps omitted on purpose.</p>
-          )}
+            <p className="muted">No artifact directory yet (not started, or not flushed).</p>
+          ) : null}
           {w.logTail === '__REDACTED__' && (
             <div className="error-banner">Log redacted by Prow.</div>
           )}
-          <div className="dbg-step-links">
-            {w.stepBase && (
-              <a className="btn btn-primary" href={`${w.stepBase}/build-log.txt`} target="_blank" rel="noreferrer">
-                build-log.txt
-              </a>
-            )}
-            {w.keyArtifacts.map((art) => (
-              <a key={art.url} className="btn" href={art.url} target="_blank" rel="noreferrer">
-                {art.label}
-              </a>
-            ))}
-          </div>
+          {hasLog && (
+            <>
+              <p className="muted dbg-log-label">Last ~100 lines of build-log.txt</p>
+              <pre className="dbg-log">{w.logTail}</pre>
+            </>
+          )}
+          {w.observed && !hasLog && w.logTail !== '__REDACTED__' && (
+            <p className="muted">No build-log content available for this step yet.</p>
+          )}
+          {arts.length > 0 && (
+            <div className="dbg-step-links">
+              {arts.map((art) => (
+                <a
+                  key={art.url}
+                  className={art.primary ? 'btn btn-primary' : 'btn'}
+                  href={art.url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {art.label} ↗
+                </a>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

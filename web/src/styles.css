@@ -1237,6 +1237,25 @@ select {
   margin: 10px 0 0;
   font-size: 0.88rem;
 }
+.dbg-log-label {
+  margin: 12px 0 6px !important;
+  font-size: 0.8rem !important;
+}
+.dbg-log {
+  margin: 0;
+  padding: 12px 14px;
+  max-height: min(420px, 50vh);
+  overflow: auto;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 88%, #000);
+  color: var(--text);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .dbg-step-links {
   display: flex;
   flex-wrap: wrap;
