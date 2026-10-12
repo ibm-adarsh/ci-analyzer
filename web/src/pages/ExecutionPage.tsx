@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { analyzeExecution, type DebugAnalysis, type WorkflowStepView } from '../lib/analyze';
 import { buildAgentPrompt, type PromptMode } from '../lib/agentPrompt';
@@ -28,6 +28,31 @@ export function ExecutionPage() {
   const [open, setOpen] = useState<string | null>(null);
   const [tab, setTab] = useState<PageTab>('debug');
   const [showTech, setShowTech] = useState(false);
+  const stepEls = useRef(new Map<string, HTMLElement>());
+
+  const registerStepEl = (name: string, el: HTMLElement | null) => {
+    if (el) stepEls.current.set(name, el);
+    else stepEls.current.delete(name);
+  };
+
+  const jumpToStep = (name: string | null) => {
+    if (!name) return;
+    setTab('debug');
+    setOpen(name);
+    // Wait for expand + tab paint, then scroll into view.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = stepEls.current.get(name);
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.remove('dbg-step-flash');
+        // reflow so re-click retriggers the highlight
+        void el.offsetWidth;
+        el.classList.add('dbg-step-flash');
+        window.setTimeout(() => el.classList.remove('dbg-step-flash'), 1400);
+      });
+    });
+  };
 
   useEffect(() => {
     if (!parsed) {
@@ -147,13 +172,13 @@ export function ExecutionPage() {
           <a className="btn btn-primary" href={a.raw} target="_blank" rel="noreferrer">
             Open in Prow
           </a>
-          {a.firstFailed && tab === 'debug' && (
-            <button type="button" className="btn" onClick={() => setOpen(a.firstFailed)}>
+          {a.firstFailed && (
+            <button type="button" className="btn" onClick={() => jumpToStep(a.firstFailed)}>
               Jump to failure
             </button>
           )}
-          {a.currentStep && a.result === 'RUNNING' && tab === 'debug' && (
-            <button type="button" className="btn" onClick={() => setOpen(a.currentStep)}>
+          {a.currentStep && a.result === 'RUNNING' && (
+            <button type="button" className="btn" onClick={() => jumpToStep(a.currentStep)}>
               Jump to current
             </button>
           )}
@@ -250,6 +275,7 @@ export function ExecutionPage() {
                         w={w}
                         open={open === w.name}
                         onToggle={() => setOpen(open === w.name ? null : w.name)}
+                        registerEl={registerStepEl}
                       />
                     ))}
                   </div>
@@ -533,10 +559,12 @@ function StepCard({
   w,
   open,
   onToggle,
+  registerEl,
 }: {
   w: WorkflowStepView;
   open: boolean;
   onToggle: () => void;
+  registerEl: (name: string, el: HTMLElement | null) => void;
 }) {
   const arts = stepArtifactLinks(w);
   const hasLog =
@@ -544,6 +572,8 @@ function StepCard({
 
   return (
     <div
+      id={`step-${w.name}`}
+      ref={(el) => registerEl(w.name, el)}
       className={`dbg-step st-${w.status}${open ? ' open' : ''}${w.observed ? '' : ' pending-row'}`}
     >
       <button type="button" className="dbg-step-h" onClick={onToggle} aria-expanded={open}>

@@ -1179,6 +1179,20 @@ select {
 .dbg-step.pending-row {
   opacity: 0.72;
 }
+.dbg-step.dbg-step-flash {
+  animation: dbg-step-flash 1.3s ease-out;
+}
+@keyframes dbg-step-flash {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  35% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
 .dbg-step.open {
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
