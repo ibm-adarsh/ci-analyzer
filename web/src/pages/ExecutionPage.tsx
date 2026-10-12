@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { analyzeExecution, type DebugAnalysis, type WorkflowStepView } from '../lib/analyze';
 import { buildAgentPrompt, type PromptMode } from '../lib/agentPrompt';
@@ -12,6 +12,12 @@ import { resolveLpar } from '../lib/lparResolve';
 
 type PageTab = 'debug' | 'prompt' | 'guide';
 
+function shortJob(name: string): string {
+  return name
+    .replace(/^periodic-ci-openshift-multiarch-main-nightly-/, '')
+    .replace(/^periodic-ci-openshift-multiarch-master-nightly-/, '');
+}
+
 export function ExecutionPage() {
   const { bucketEnc = '', pathEnc = '' } = useParams();
   const parsed = useMemo(() => parseExecutionRoute(bucketEnc, pathEnc), [bucketEnc, pathEnc]);
@@ -21,6 +27,7 @@ export function ExecutionPage() {
   const [label, setLabel] = useState('Starting…');
   const [open, setOpen] = useState<string | null>(null);
   const [tab, setTab] = useState<PageTab>('debug');
+  const [showTech, setShowTech] = useState(false);
 
   useEffect(() => {
     if (!parsed) {
@@ -68,20 +75,21 @@ export function ExecutionPage() {
   }
   if (!a) {
     return (
-      <section className="panel">
-        <h2>Loading job debug data…</h2>
+      <section className="dbg-load">
+        <p className="dbg-kicker">Loading</p>
+        <h2>Fetching job evidence…</h2>
         <p className="muted">{label}</p>
         <div className="progress">
           <i style={{ width: `${pct}%` }} />
         </div>
         <p className="mono muted" style={{ fontSize: 12 }}>
-          {parsed.jobName}
+          {shortJob(parsed.jobName)}
         </p>
       </section>
     );
   }
 
-  const heroCls = a.result === 'PASSED' ? 'pass' : a.result === 'FAILED' ? 'fail' : 'run';
+  const tone = a.result === 'PASSED' ? 'pass' : a.result === 'FAILED' ? 'fail' : 'run';
   const start = a.started?.timestamp
     ? new Date(a.started.timestamp * 1000).toUTCString()
     : '—';
@@ -89,60 +97,71 @@ export function ExecutionPage() {
     a.started?.timestamp && a.finished?.timestamp
       ? fmtDur(a.finished.timestamp - a.started.timestamp)
       : a.result === 'RUNNING' && a.started?.timestamp
-        ? `${fmtDur(Math.floor(Date.now() / 1000) - a.started.timestamp)} (so far)`
+        ? `${fmtDur(Math.floor(Date.now() / 1000) - a.started.timestamp)} so far`
         : '—';
   const lpar = a.leaseSlot ? resolveLpar(a.leaseSlot) : null;
   const releaseLinks = releaseBrowserLinks(a.release?.tag || null);
   const pending = a.workflow.filter((w) => w.status === 'pending' || w.status === 'current').length;
   const failed = a.workflow.filter((w) => w.status === 'failed').length;
   const passed = a.workflow.filter((w) => w.status === 'passed').length;
+  const wfName = a.meta.workflow || WORKFLOW_SOURCE.name;
+  const configUrl = a.configLinks.links.find((l) => l.label.includes('ci-operator config'))?.url;
+
+  const chips: { label: string; value: string }[] = [
+    { label: 'OCP', value: a.meta.ocpVersion || '—' },
+    { label: 'Profile', value: a.meta.profile || '—' },
+    { label: 'Topology', value: a.meta.topology || '—' },
+    {
+      label: 'Test',
+      value: [a.meta.testType, a.meta.fips ? 'FIPS' : null, a.meta.techPreview ? 'TechPreview' : null]
+        .filter(Boolean)
+        .join(' · '),
+    },
+  ];
 
   return (
-    <>
-      <div style={{ marginBottom: 10 }}>
-        <Link to="/" className="muted">
-          ← Paste another job URL
-        </Link>
+    <div className="dbg">
+      <div className="dbg-back">
+        <Link to="/">← Paste another job URL</Link>
       </div>
 
-      {/* Status + what's happening */}
-      <div className={`hero ${heroCls}`}>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 260 }}>
-            <div className="muted" style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em' }}>
-              JOB DEBUG
-            </div>
-            <h2 style={{ fontSize: 15, wordBreak: 'break-all' }}>{a.jobName}</h2>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 6 }}>
-              <StatusBadge status={a.result} />
-              <span className="mono muted" style={{ fontSize: 11 }}>
-                {a.buildId}
-              </span>
-            </div>
-            <p style={{ margin: '10px 0 0', color: 'var(--text2)', fontSize: 13.5, lineHeight: 1.55 }}>
-              {a.progressSummary}
-            </p>
+      <header className={`dbg-hero tone-${tone}`}>
+        <div className="dbg-hero-main">
+          <div className="dbg-hero-top">
+            <StatusBadge status={a.result} />
+            <span className="dbg-build mono">{a.buildId}</span>
+            <span className="dbg-total mono">{dur}</span>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <a className="btn btn-primary" href={a.raw} target="_blank" rel="noreferrer">
-              Open in Prow ↗
-            </a>
-            {a.firstFailed && tab === 'debug' && (
-              <button type="button" className="btn" onClick={() => setOpen(a.firstFailed)}>
-                Jump to failed step
-              </button>
-            )}
-            {a.currentStep && a.result === 'RUNNING' && tab === 'debug' && (
-              <button type="button" className="btn" onClick={() => setOpen(a.currentStep)}>
-                Jump to current step
-              </button>
-            )}
-            <button type="button" className="btn" onClick={() => setTab('prompt')}>
-              Copy AI prompt
-            </button>
+          <h1 title={a.jobName}>{shortJob(a.jobName)}</h1>
+          <p className="dbg-summary">{a.progressSummary}</p>
+          <div className="dbg-chips">
+            {chips.map((c) => (
+              <div key={c.label} className="dbg-chip">
+                <span>{c.label}</span>
+                <strong>{c.value}</strong>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
+        <div className="dbg-hero-actions">
+          <a className="btn btn-primary" href={a.raw} target="_blank" rel="noreferrer">
+            Open in Prow
+          </a>
+          {a.firstFailed && tab === 'debug' && (
+            <button type="button" className="btn" onClick={() => setOpen(a.firstFailed)}>
+              Jump to failure
+            </button>
+          )}
+          {a.currentStep && a.result === 'RUNNING' && tab === 'debug' && (
+            <button type="button" className="btn" onClick={() => setOpen(a.currentStep)}>
+              Jump to current
+            </button>
+          )}
+          <button type="button" className="btn" onClick={() => setTab('prompt')}>
+            AI prompt
+          </button>
+        </div>
+      </header>
 
       <nav className="tabs" aria-label="Job views">
         <button
@@ -150,14 +169,14 @@ export function ExecutionPage() {
           className={tab === 'debug' ? 'tab active' : 'tab'}
           onClick={() => setTab('debug')}
         >
-          Debug view
+          Debug
         </button>
         <button
           type="button"
           className={tab === 'prompt' ? 'tab active' : 'tab'}
           onClick={() => setTab('prompt')}
         >
-          AI agent prompt
+          AI prompt
         </button>
         <button
           type="button"
@@ -173,168 +192,185 @@ export function ExecutionPage() {
       ) : tab === 'guide' ? (
         <section className="panel">
           <WorkflowGuideView
-            key={`${a.jobName}:${a.meta.workflow || WORKFLOW_SOURCE.name}`}
+            key={`${a.jobName}:${wfName}`}
             compact
-            workflowName={a.meta.workflow || WORKFLOW_SOURCE.name}
+            workflowName={wfName}
             jobName={a.jobName}
           />
         </section>
       ) : (
         <>
-          <section className="panel" style={{ marginBottom: 12 }}>
-            <h2>Execution context</h2>
-            <div className="stat-row">
-              <div className="stat">
+          <section className="dbg-score" aria-label="Step counts and phase time">
+            <div className="dbg-counts">
+              <div className="dbg-count">
                 <b>{passed}</b>
                 <span>Passed</span>
               </div>
-              <div className="stat">
-                <b style={{ color: 'var(--red)' }}>{failed}</b>
+              <div className="dbg-count fail">
+                <b>{failed}</b>
                 <span>Failed</span>
               </div>
-              <div className="stat">
-                <b style={{ color: 'var(--accent)' }}>{pending}</b>
-                <span>Pending / current</span>
-              </div>
-              <div className="stat">
-                <b style={{ fontSize: 14 }}>{dur}</b>
-                <span>Total</span>
+              <div className="dbg-count run">
+                <b>{pending}</b>
+                <span>Pending</span>
               </div>
             </div>
             <PhaseTimeline timings={a.phaseTimings} />
-            <div className="kv" style={{ marginTop: 8 }}>
-              <span className="k">Started</span>
-              <span className="v">{start}</span>
-              <span className="k">Cluster profile</span>
-              <span className="v mono">{a.meta.profile}</span>
-              <span className="k">Workflow</span>
-              <span className="v">
-                <code>{a.meta.workflow || WORKFLOW_SOURCE.name}</code>{' '}
-                <a href={WORKFLOW_SOURCE.yaml} target="_blank" rel="noreferrer">
-                  source ↗
-                </a>{' '}
-                <a href={WORKFLOW_SOURCE.stepsCi} target="_blank" rel="noreferrer">
-                  steps.ci ↗
-                </a>
-              </span>
-              <span className="k">Topology</span>
-              <span className="v">{a.meta.topology}</span>
-              <span className="k">OCP / BRANCH</span>
-              <span className="v mono">
-                {a.meta.ocpVersion || '—'}
-                {a.meta.fromVersion ? ` (upgrade from ${a.meta.fromVersion})` : ''}
-              </span>
-              <span className="k">Test type</span>
-              <span className="v">
-                {a.meta.testType}
-                {a.meta.fips ? ' · FIPS' : ''}
-                {a.meta.techPreview ? ' · TechPreview' : ''}
-              </span>
-              <span className="k">Test subdir</span>
-              <span className="v mono">{a.testSubdir || '—'}</span>
-              <span className="k">Lease</span>
-              <span className="v mono">
-                {a.leaseSlot || '— (root build-log not available yet)'}
-                {lpar ? ` → ${lpar.lpar} · ${lpar.qemuUri}` : ''}
-              </span>
-              <span className="k">Release build</span>
-              <span className="v">
-                {a.release?.tag ? (
-                  <>
-                    <code>{a.release.tag}</code>
-                    {a.release.createdAt && (
-                      <span className="muted"> · created {a.release.createdAt}</span>
-                    )}
-                    <span className="muted"> · from {a.release.source}</span>
-                    <div style={{ marginTop: 4, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {releaseLinks.map((l) => (
-                        <a key={l.url} className="btn" href={l.url} target="_blank" rel="noreferrer">
-                          {l.label} ↗
-                        </a>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <span className="muted">
-                    Not found yet (common while job is early / root log missing)
-                  </span>
-                )}
-              </span>
-              {a.release?.pullSpec && (
-                <>
-                  <span className="k">Tests image</span>
-                  <span className="v mono" style={{ fontSize: 11 }}>
-                    {a.release.pullSpec}
-                  </span>
-                </>
-              )}
-              {a.release?.installTarget && (
-                <>
-                  <span className="k">Install image</span>
-                  <span className="v mono" style={{ fontSize: 11 }}>
-                    {a.release.installTarget}
-                  </span>
-                </>
-              )}
-              <span className="k">ci-operator config</span>
-              <span className="v">
-                {a.configLinks.variant ? (
-                  <a
-                    href={a.configLinks.links.find((l) => l.label.includes('ci-operator config'))?.url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {a.configLinks.org}/{a.configLinks.repo} __{a.configLinks.variant}.yaml ↗
-                  </a>
-                ) : (
-                  <span className="muted">variant unresolved</span>
-                )}
-              </span>
-            </div>
           </section>
 
           {a.result === 'FAILED' && a.firstFailed && <FailureBlock a={a} onOpen={setOpen} />}
 
-          <section className="panel">
-            <h2>
-              Workflow steps{' '}
-              <span className="muted" style={{ fontWeight: 500 }}>
-                (configured {WORKFLOW_SOURCE.name} · pending = no artifact dir yet)
-              </span>
-            </h2>
+          <section className="dbg-steps-panel">
+            <div className="dbg-section-head">
+              <h2>Workflow steps</h2>
+              <div className="dbg-section-links">
+                <a href={WORKFLOW_SOURCE.stepsCi} target="_blank" rel="noreferrer">
+                  {wfName}
+                </a>
+                <a href={WORKFLOW_SOURCE.yaml} target="_blank" rel="noreferrer">
+                  YAML
+                </a>
+              </div>
+            </div>
             {(['pre', 'test', 'post'] as const).map((ph) => {
               const group = a.workflow.filter((w) => w.phase === ph);
               if (!group.length) return null;
+              const timing = a.phaseTimings.find((t) => t.phase === ph);
               return (
-                <div key={ph} style={{ marginBottom: 16 }}>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      letterSpacing: '0.06em',
-                      color: 'var(--muted)',
-                      marginBottom: 8,
-                    }}
-                  >
-                    {ph.toUpperCase()} · {a.phaseStatus[ph]}
+                <div key={ph} className={`dbg-phase-block ph-${ph}`}>
+                  <div className="dbg-phase-h">
+                    <span className="dbg-phase-name">{ph.toUpperCase()}</span>
+                    <span className="dbg-phase-status">{a.phaseStatus[ph]}</span>
+                    <span className="dbg-phase-dur mono">
+                      {timing && timing.timedSteps > 0 ? fmtDur(timing.seconds) : '—'}
+                    </span>
                   </div>
-                  {group.map((w) => (
-                    <StepCard
-                      key={w.name}
-                      w={w}
-                      open={open === w.name}
-                      onToggle={() => setOpen(open === w.name ? null : w.name)}
-                    />
-                  ))}
+                  <div className="dbg-step-list">
+                    {group.map((w) => (
+                      <StepCard
+                        key={w.name}
+                        w={w}
+                        open={open === w.name}
+                        onToggle={() => setOpen(open === w.name ? null : w.name)}
+                      />
+                    ))}
+                  </div>
                 </div>
               );
             })}
           </section>
 
-          <EnvPanel a={a} />
+          <section className="dbg-tech">
+            <button
+              type="button"
+              className="dbg-tech-toggle"
+              onClick={() => setShowTech((v) => !v)}
+              aria-expanded={showTech}
+            >
+              <span>Job details</span>
+              <span className="muted">{showTech ? 'Hide' : 'Show lease, release, config…'}</span>
+              <span aria-hidden>{showTech ? '−' : '+'}</span>
+            </button>
+            {showTech && (
+              <div className="dbg-tech-body">
+                <Detail label="Started" value={start} />
+                <Detail
+                  label="Workflow"
+                  value={
+                    <>
+                      <code>{wfName}</code>{' '}
+                      <a href={WORKFLOW_SOURCE.stepsCi} target="_blank" rel="noreferrer">
+                        steps.ci
+                      </a>{' '}
+                      <a href={WORKFLOW_SOURCE.yaml} target="_blank" rel="noreferrer">
+                        YAML
+                      </a>
+                    </>
+                  }
+                />
+                <Detail label="Artifact subdir" value={<code>{a.testSubdir || '—'}</code>} />
+                <Detail
+                  label="Lease / LPAR"
+                  value={
+                    a.leaseSlot ? (
+                      <>
+                        <code>{a.leaseSlot}</code>
+                        {lpar ? (
+                          <span className="muted">
+                            {' '}
+                            → {lpar.lpar}
+                          </span>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className="muted">Not in root build-log yet</span>
+                    )
+                  }
+                />
+                {lpar?.qemuUri && (
+                  <Detail label="Libvirt URI" value={<code className="dbg-break">{lpar.qemuUri}</code>} />
+                )}
+                <Detail
+                  label="Release"
+                  value={
+                    a.release?.tag ? (
+                      <>
+                        <code>{a.release.tag}</code>
+                        {a.release.createdAt ? (
+                          <span className="muted"> · {a.release.createdAt}</span>
+                        ) : null}
+                        <div className="dbg-inline-links">
+                          {releaseLinks.map((l) => (
+                            <a key={l.url} href={l.url} target="_blank" rel="noreferrer">
+                              {l.label}
+                            </a>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <span className="muted">Not resolved yet</span>
+                    )
+                  }
+                />
+                {a.release?.pullSpec && (
+                  <Detail
+                    label="Tests image"
+                    value={<code className="dbg-break">{a.release.pullSpec}</code>}
+                  />
+                )}
+                {a.release?.installTarget && (
+                  <Detail
+                    label="Install image"
+                    value={<code className="dbg-break">{a.release.installTarget}</code>}
+                  />
+                )}
+                <Detail
+                  label="ci-operator config"
+                  value={
+                    configUrl ? (
+                      <a href={configUrl} target="_blank" rel="noreferrer">
+                        {a.configLinks.org}/{a.configLinks.repo} __{a.configLinks.variant}.yaml
+                      </a>
+                    ) : (
+                      <span className="muted">unresolved</span>
+                    )
+                  }
+                />
+              </div>
+            )}
+          </section>
         </>
       )}
-    </>
+    </div>
+  );
+}
+
+function Detail({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="dbg-detail">
+      <span>{label}</span>
+      <div>{value}</div>
+    </div>
   );
 }
 
@@ -349,7 +385,6 @@ function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fallback for restricted clipboard
       const ta = document.createElement('textarea');
       ta.value = prompt;
       document.body.appendChild(ta);
@@ -365,9 +400,8 @@ function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
     <section className="panel">
       <h2>AI agent prompt</h2>
       <p className="muted">
-        Copy this into Cursor, ChatGPT, Claude, or any agent. It includes the Prow job link, failed
-        steps with artifact URLs, workflow status, release/context, and log excerpts so the agent can
-        keep investigating on its own.
+        Copy into Cursor or any agent. Includes job URL, failed-step artifact links, phase timings,
+        and high-signal log excerpts when detected.
       </p>
       <div className="prompt-toolbar">
         <div className="seg">
@@ -394,9 +428,6 @@ function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
         {prompt}
       </pre>
       <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-        {mode === 'focused'
-          ? 'Focused mode: shorter excerpts around failures / current step.'
-          : 'Full mode: longer log excerpts plus diagnosis facts.'}{' '}
         ~{prompt.length.toLocaleString()} characters.
       </p>
     </section>
@@ -408,31 +439,28 @@ function PhaseTimeline({ timings }: { timings: DebugAnalysis['phaseTimings'] }) 
   const hasAny = timings.some((t) => t.timedSteps > 0);
   if (!hasAny) {
     return (
-      <p className="muted" style={{ margin: '12px 0 0', fontSize: 12.5 }}>
-        Phase timing unavailable yet (needs finished.json timestamps on steps).
-      </p>
+      <div className="phase-tl empty">
+        <span className="muted">Phase timing appears after step finished.json timestamps exist.</span>
+      </div>
     );
   }
   return (
     <div className="phase-tl" aria-label="Phase duration timeline">
       <div className="phase-tl-head">
-        <span>Phase time</span>
-        <span className="mono">{fmtDur(total)} summed from step finishes</span>
+        <span>Phase duration</span>
+        <span className="mono">{fmtDur(total)}</span>
       </div>
       <div className="phase-tl-bar">
-        {timings.map((t) => {
-          const pct = total > 0 ? Math.max(t.seconds > 0 ? 4 : 0, (t.seconds / total) * 100) : 0;
-          return (
-            <div
-              key={t.phase}
-              className={`phase-tl-seg ph-${t.phase} st-${t.status}`}
-              style={{ flexGrow: Math.max(t.seconds, t.timedSteps ? 1 : 0), flexBasis: 0 }}
-              title={`${t.label}: ${fmtDur(t.seconds)}`}
-            >
-              {pct >= 12 ? <span>{t.label}</span> : null}
-            </div>
-          );
-        })}
+        {timings.map((t) => (
+          <div
+            key={t.phase}
+            className={`phase-tl-seg ph-${t.phase} st-${t.status}`}
+            style={{ flexGrow: Math.max(t.seconds, t.timedSteps ? 1 : 0), flexBasis: 0 }}
+            title={`${t.label}: ${fmtDur(t.seconds)}`}
+          >
+            {total > 0 && t.seconds / total >= 0.12 ? <span>{t.label}</span> : null}
+          </div>
+        ))}
       </div>
       <div className="phase-tl-legend">
         {timings.map((t) => (
@@ -440,7 +468,7 @@ function PhaseTimeline({ timings }: { timings: DebugAnalysis['phaseTimings'] }) 
             <strong>{t.label}</strong>
             <span className="mono">{fmtDur(t.seconds)}</span>
             <em>
-              {t.timedSteps}/{t.stepCount} steps · {t.status}
+              {t.timedSteps}/{t.stepCount} · {t.status}
             </em>
           </div>
         ))}
@@ -453,19 +481,17 @@ function FailureBlock({ a, onOpen }: { a: DebugAnalysis; onOpen: (s: string) => 
   const d = a.diagnosis;
   const step = a.workflow.find((w) => w.name === a.firstFailed);
   return (
-    <section className="panel" style={{ marginBottom: 12, borderLeft: '4px solid var(--red)' }}>
-      <h2>Failure focus</h2>
+    <section className="dbg-fail">
+      <div className="dbg-fail-label">Primary failure</div>
+      <h2>
+        <code>{a.firstFailed}</code>
+      </h2>
       <p>
-        Primary signal: <code>{a.firstFailed}</code>
-        {step?.bestEffort ? ' (best-effort / often secondary)' : ''}
-        {step?.duration != null ? (
-          <span className="muted"> · ran {fmtDur(step.duration)}</span>
-        ) : null}
+        {step?.bestEffort ? 'Best-effort step — often secondary. ' : null}
+        {step?.duration != null ? <>Ran {fmtDur(step.duration)}. </> : null}
+        Open the step log or artifacts to investigate.
       </p>
-      <p className="muted" style={{ marginTop: 6 }}>
-        Open the step log or key artifacts below — raw log dumps here are usually noise.
-      </p>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+      <div className="dbg-fail-actions">
         {step?.stepBase && (
           <a
             className="btn btn-primary"
@@ -473,7 +499,7 @@ function FailureBlock({ a, onOpen }: { a: DebugAnalysis; onOpen: (s: string) => 
             target="_blank"
             rel="noreferrer"
           >
-            Open build-log.txt ↗
+            build-log.txt
           </a>
         )}
         <button type="button" className="btn" onClick={() => onOpen(a.firstFailed!)}>
@@ -484,7 +510,7 @@ function FailureBlock({ a, onOpen }: { a: DebugAnalysis; onOpen: (s: string) => 
           .slice(0, 4)
           .map((e) => (
             <a key={e.url} className="btn" href={e.url} target="_blank" rel="noreferrer">
-              {e.label} ↗
+              {e.label}
             </a>
           ))}
       </div>
@@ -501,108 +527,49 @@ function StepCard({
   open: boolean;
   onToggle: () => void;
 }) {
-  const border =
-    w.status === 'failed'
-      ? 'var(--red)'
-      : w.status === 'current' || w.status === 'running'
-        ? 'var(--accent)'
-        : w.status === 'passed'
-          ? 'var(--green)'
-          : 'var(--border)';
   return (
     <div
-      className="step-row"
-      style={{ borderColor: border, opacity: w.status === 'pending' ? 0.72 : 1 }}
+      className={`dbg-step st-${w.status}${open ? ' open' : ''}${w.observed ? '' : ' pending-row'}`}
     >
-      <div className="step-hdr" onClick={onToggle} role="button" tabIndex={0} onKeyDown={() => undefined}>
+      <button type="button" className="dbg-step-h" onClick={onToggle} aria-expanded={open}>
         <StatusBadge status={w.status === 'current' ? 'RUNNING' : w.status} />
-        <span className="name">
+        <span className="dbg-step-name">
           {w.name}
-          {w.bestEffort ? <span className="muted"> · best_effort</span> : null}
-          {w.status === 'current' ? <span style={{ color: 'var(--accent)' }}> · CURRENT</span> : null}
+          {w.bestEffort ? <em>best_effort</em> : null}
         </span>
-        <span className="muted">{w.observed ? fmtDur(w.duration) : 'not started'}</span>
-        {w.stepBase && (
-          <a
-            href={`${w.stepBase}/build-log.txt`}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(e) => e.stopPropagation()}
-          >
-            log ↗
-          </a>
-        )}
-      </div>
+        <span className="dbg-step-dur mono">
+          {w.observed ? fmtDur(w.duration) : '—'}
+        </span>
+        <span className="dbg-step-chev" aria-hidden>
+          {open ? '−' : '+'}
+        </span>
+      </button>
       {open && (
-        <div className="step-body">
-          {!w.observed && (
+        <div className="dbg-step-body">
+          {!w.observed ? (
             <p className="muted">
-              No artifact directory yet. For a RUNNING job this usually means the step has not started
-              (or ci-operator has not written it). The workflow still expects it.
+              No artifact directory yet (not started, or not flushed).
             </p>
-          )}
-          {w.observed && (
-            <p className="muted" style={{ marginTop: 0 }}>
-              Use the log / artifact links — inline log dumps are omitted on purpose.
-            </p>
+          ) : (
+            <p className="muted">Open logs / artifacts — inline dumps omitted on purpose.</p>
           )}
           {w.logTail === '__REDACTED__' && (
             <div className="error-banner">Log redacted by Prow.</div>
           )}
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+          <div className="dbg-step-links">
             {w.stepBase && (
               <a className="btn btn-primary" href={`${w.stepBase}/build-log.txt`} target="_blank" rel="noreferrer">
-                build-log.txt ↗
+                build-log.txt
               </a>
             )}
             {w.keyArtifacts.map((art) => (
               <a key={art.url} className="btn" href={art.url} target="_blank" rel="noreferrer">
-                {art.label} ↗
+                {art.label}
               </a>
             ))}
           </div>
         </div>
       )}
     </div>
-  );
-}
-
-function EnvPanel({ a }: { a: DebugAnalysis }) {
-  // Static VPN defaults that matter for IBM Z, plus live-parsed hints from meta
-  const rows: { k: string; v: string; note?: string }[] = [
-    { k: 'ARCH', v: 's390x', note: 'from job / profile' },
-    { k: 'CLUSTER_PROFILE', v: a.meta.profile },
-    { k: 'ETCD_DISK_SPEED', v: 'slow', note: 'vpn workflow default · etcd-on-ramfs' },
-    { k: 'USE_EXTERNAL_DNS', v: 'true', note: 'typical for libvirt-s390x-vpn jobs' },
-    { k: 'TEST_TYPE', v: a.meta.testType },
-    { k: 'BRANCH / OCP', v: a.meta.ocpVersion || '—' },
-    { k: 'FIPS_ENABLED', v: a.meta.fips ? 'true' : 'false' },
-    { k: 'FEATURE_SET', v: a.meta.techPreview ? 'TechPreviewNoUpgrade' : 'default' },
-    { k: 'INSTALLER_TYPE', v: a.meta.installer },
-  ];
-  if (a.meta.fromVersion) {
-    rows.push({ k: 'UPGRADE_FROM', v: a.meta.fromVersion });
-  }
-
-  return (
-    <section className="panel" style={{ marginTop: 12 }}>
-      <h2>Environment (vpn profile context)</h2>
-      <p className="muted">
-        Values below mix job-name/prowjob facts with documented defaults for{' '}
-        <code>libvirt-s390x-vpn</code> / vpn-oz style jobs in openshift/release. Live exports from step
-        logs are preferred when present in a future enhancement.
-      </p>
-      <div className="kv">
-        {rows.map((r) => (
-          <div key={r.k} style={{ display: 'contents' }}>
-            <span className="k">{r.k}</span>
-            <span className="v">
-              <code>{r.v}</code>
-              {r.note ? <span className="muted"> · {r.note}</span> : null}
-            </span>
-          </div>
-        ))}
-      </div>
-    </section>
   );
 }
