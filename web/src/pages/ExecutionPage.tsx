@@ -460,6 +460,18 @@ function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
   );
 }
 
+function formatPhaseStepSummary(t: DebugAnalysis['phaseTimings'][number]): string {
+  const parts: string[] = [];
+  if (t.failedCount) parts.push(`${t.failedCount} failed`);
+  if (t.passedCount) parts.push(`${t.passedCount} passed`);
+  if (t.pendingCount) parts.push(`${t.pendingCount} pending`);
+  if (!parts.length) {
+    if (t.status === 'skipped') return 'skipped';
+    return `${t.stepCount} steps`;
+  }
+  return parts.join(' · ');
+}
+
 function PhaseTimeline({ timings }: { timings: DebugAnalysis['phaseTimings'] }) {
   const total = timings.reduce((s, t) => s + t.seconds, 0);
   const hasAny = timings.some((t) => t.timedSteps > 0);
@@ -493,9 +505,7 @@ function PhaseTimeline({ timings }: { timings: DebugAnalysis['phaseTimings'] }) 
           <div key={t.phase} className={`phase-tl-item ph-${t.phase}`}>
             <strong>{t.label}</strong>
             <span className="mono">{fmtDur(t.seconds)}</span>
-            <em>
-              {t.timedSteps}/{t.stepCount} · {t.status}
-            </em>
+            <em>{formatPhaseStepSummary(t)}</em>
           </div>
         ))}
       </div>

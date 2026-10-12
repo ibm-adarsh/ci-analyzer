@@ -235,6 +235,9 @@ export interface PhaseTiming {
   seconds: number;
   timedSteps: number;
   stepCount: number;
+  passedCount: number;
+  failedCount: number;
+  pendingCount: number;
   status: string;
 }
 
@@ -258,11 +261,18 @@ function computePhaseTimings(
     const group = workflow.filter((w) => w.phase === ph);
     let seconds = 0;
     let timedSteps = 0;
+    let passedCount = 0;
+    let failedCount = 0;
+    let pendingCount = 0;
     for (const w of group) {
       if (w.duration != null && w.duration >= 0) {
         seconds += w.duration;
         timedSteps += 1;
       }
+      if (w.status === 'passed') passedCount += 1;
+      else if (w.status === 'failed') failedCount += 1;
+      else if (w.status === 'pending' || w.status === 'current' || w.status === 'running')
+        pendingCount += 1;
     }
     return {
       phase: ph,
@@ -270,6 +280,9 @@ function computePhaseTimings(
       seconds,
       timedSteps,
       stepCount: group.length,
+      passedCount,
+      failedCount,
+      pendingCount,
       status: phaseStatus[ph] || 'unknown',
     };
   });
