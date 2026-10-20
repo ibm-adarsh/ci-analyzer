@@ -858,6 +858,47 @@ select {
   word-break: break-word;
   user-select: text;
 }
+.dbg-prompt-pass {
+  text-align: left;
+  padding: 28px 24px;
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--green) 12%, var(--surface)),
+    var(--surface)
+  );
+  border-color: color-mix(in srgb, var(--green) 35%, var(--border));
+}
+.dbg-prompt-pass-kicker {
+  margin: 0 0 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--green);
+}
+.dbg-prompt-pass h2 {
+  margin: 0 0 10px;
+  font-size: 1.35rem;
+}
+.dbg-prompt-pass-body {
+  margin: 0 0 12px;
+  max-width: 40rem;
+  line-height: 1.5;
+  color: var(--text2);
+}
+.dbg-prompt-pass-body strong {
+  color: var(--text);
+  font-weight: 650;
+}
+.dbg-prompt-pass-meta {
+  margin: 0 0 18px;
+  font-size: 0.88rem;
+}
+.dbg-prompt-pass-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 
 /* ── Debug execution view ── */
 .dbg {

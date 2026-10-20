@@ -827,7 +827,34 @@ function JobDetailsPanel({
 
 function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
   const [copied, setCopied] = useState(false);
-  const prompt = useMemo(() => buildAgentPrompt(a), [a]);
+  const passed = a.result === 'PASSED';
+  const prompt = useMemo(() => (passed ? '' : buildAgentPrompt(a)), [a, passed]);
+
+  if (passed) {
+    const short = shortJob(a.jobName);
+    return (
+      <section className="panel dbg-prompt-pass" aria-label="Job passed">
+        <p className="dbg-prompt-pass-kicker">All green</p>
+        <h2>Nothing for the agent this time</h2>
+        <p className="dbg-prompt-pass-body">
+          Congrats — <strong>{short}</strong> finished successfully. No failure analysis prompt is
+          needed. Open a failed run when you want a ready-to-paste IBM BOB brief.
+        </p>
+        <p className="muted dbg-prompt-pass-meta">
+          Build <span className="mono">{a.buildId}</span>
+          {a.progressSummary ? ` · ${a.progressSummary}` : null}
+        </p>
+        <div className="dbg-prompt-pass-actions">
+          <a className="btn" href={a.raw} target="_blank" rel="noreferrer">
+            View in Prow
+          </a>
+          <Link className="btn" to="/">
+            Paste another URL
+          </Link>
+        </div>
+      </section>
+    );
+  }
 
   async function copy() {
     try {
