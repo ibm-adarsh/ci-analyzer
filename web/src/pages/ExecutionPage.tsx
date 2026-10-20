@@ -10,6 +10,7 @@ import { RELEASE_REPO, STEPS_CI } from '../data/workflow';
 import { StatusBadge } from '../components/StatusBadge';
 import { WorkflowGuideView } from '../components/WorkflowGuideView';
 import { resolveLpar } from '../lib/lparResolve';
+import type { TestFailureReport } from '../lib/junit';
 
 /** Map observed GCS / hetero step name onto the workflow leaf used for UI ids. */
 function workflowStepKey(name: string | null | undefined): string | null {
@@ -270,6 +271,10 @@ export function ExecutionPage() {
             </div>
           </section>
 
+          {a.testFailures && a.testFailures.failures.length > 0 ? (
+            <TestFailuresPanel report={a.testFailures} />
+          ) : null}
+
           <section className="dbg-steps-panel">
             <div className="dbg-section-head">
               <h2>Workflow steps</h2>
@@ -324,6 +329,128 @@ export function ExecutionPage() {
         </>
       )}
     </div>
+  );
+}
+
+function TestFailuresPanel({ report }: { report: TestFailureReport }) {
+  const [expanded, setExpanded] = useState(true);
+  const [showAllMonitor, setShowAllMonitor] = useState(false);
+  const blocking = report.failures.filter((f) => f.severity === 'blocking');
+  const s = report.summary;
+
+  return (
+    <section className="dbg-tests" aria-label="Failed test cases">
+      <div className="dbg-section-head">
+        <h2>
+          Failed tests
+          <span className="dbg-tests-total">{report.failures.length}</span>
+        </h2>
+        <button type="button" className="btn" onClick={() => setExpanded((v) => !v)}>
+          {expanded ? 'Collapse' : 'Expand'}
+        </button>
+      </div>
+      <p className="dbg-tests-lead">
+        From <code>{report.stepName}</code>
+        {report.expectedSuite ? (
+          <>
+            {' '}
+            · job test type <code>{report.expectedSuite}</code>
+          </>
+        ) : null}
+        {s.blockingFail != null ? (
+          <>
+            {' '}
+            · suite run {s.blockingFail} blocking / {s.informingFail ?? 0} informing /{' '}
+            {s.pass ?? '—'} pass / {s.skip ?? '—'} skip
+          </>
+        ) : null}
+      </p>
+      <div className="dbg-tests-suites" aria-label="Failures by suite">
+        {report.bySuite.map((g) => (
+          <div key={g.suite} className={`dbg-tests-suite-chip suite-${g.suite}`}>
+            <strong>{g.count}</strong>
+            <span>{g.label}</span>
+          </div>
+        ))}
+      </div>
+      {expanded && (
+        <>
+          {blocking.length > 0 && (
+            <div className="dbg-tests-block">
+              <h3>Blocking failures ({blocking.length})</h3>
+              <ul className="dbg-tests-list">
+                {blocking.map((t) => (
+                  <li key={t.name}>
+                    <span className="dbg-tests-suite-tag">{t.suiteTag || t.suite}</span>
+                    <code>{t.name.replace(/\s*\[Suite:[^\]]+\]/g, '').trim()}</code>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {report.bySuite.map((g) => {
+            const isMonitor = g.suite === 'monitor';
+            const tests =
+              isMonitor && !showAllMonitor && g.tests.length > 12
+                ? g.tests.slice(0, 12)
+                : g.tests;
+            // Skip duplicating blocking-only group when already listed above and suite is small
+            if (blocking.length && g.tests.every((t) => t.severity === 'blocking') && g.suite !== 'monitor') {
+              return null;
+            }
+            const nonBlocking = tests.filter((t) => t.severity !== 'blocking');
+            const list = blocking.length && g.suite !== 'monitor' ? nonBlocking : tests;
+            if (!list.length && !(isMonitor && g.tests.length)) return null;
+            const show = isMonitor ? tests : list;
+            if (!show.length) return null;
+            return (
+              <div key={`list-${g.suite}`} className="dbg-tests-block">
+                <h3>
+                  {g.label} ({g.count})
+                </h3>
+                <ul className="dbg-tests-list">
+                  {show.map((t) => (
+                    <li key={`${g.suite}-${t.name}`}>
+                      {t.severity === 'blocking' ? (
+                        <span className="dbg-tests-sev">blocking</span>
+                      ) : t.severity === 'informing' ? (
+                        <span className="dbg-tests-sev informing">informing</span>
+                      ) : null}
+                      <code>{t.name.replace(/\s*\[Suite:[^\]]+\]/g, '').trim()}</code>
+                    </li>
+                  ))}
+                </ul>
+                {isMonitor && g.tests.length > 12 && (
+                  <button
+                    type="button"
+                    className="btn wg-more-btn"
+                    onClick={() => setShowAllMonitor((v) => !v)}
+                  >
+                    {showAllMonitor ? 'Show fewer monitor failures' : `Show all ${g.count} monitor failures`}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          {report.junitFiles.length > 0 && (
+            <div className="dbg-tests-links">
+              {report.junitFiles.map((f) => (
+                <a key={f.url} className="btn" href={f.url} target="_blank" rel="noreferrer">
+                  {f.name}
+                </a>
+              ))}
+            </div>
+          )}
+          {report.notes.length > 0 && (
+            <ul className="dbg-tests-notes">
+              {report.notes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 

@@ -1056,6 +1056,130 @@ select {
 .dbg-count.fail b {
   color: var(--red);
 }
+
+.dbg-tests {
+  margin-bottom: 16px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: linear-gradient(165deg, color-mix(in srgb, var(--red) 8%, var(--surface)), var(--surface));
+  border: 1px solid color-mix(in srgb, var(--red) 28%, var(--border));
+}
+.dbg-tests .dbg-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.dbg-tests h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.dbg-tests-total {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--red);
+  background: var(--red-bg);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.dbg-tests-lead {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  color: var(--text2);
+}
+.dbg-tests-suites {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.dbg-tests-suite-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+.dbg-tests-suite-chip strong {
+  font-variant-numeric: tabular-nums;
+  color: var(--red);
+  font-size: 1.05rem;
+}
+.dbg-tests-suite-chip.suite-monitor strong {
+  color: var(--yellow);
+}
+.dbg-tests-block {
+  margin-top: 12px;
+}
+.dbg-tests-block h3 {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.dbg-tests-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.dbg-tests-list li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 10px;
+  align-items: start;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+}
+.dbg-tests-list code {
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--value);
+  word-break: break-word;
+}
+.dbg-tests-suite-tag,
+.dbg-tests-sev {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-dim);
+  padding: 3px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.dbg-tests-sev {
+  color: var(--red);
+  background: var(--red-bg);
+}
+.dbg-tests-sev.informing {
+  color: var(--yellow);
+  background: var(--yellow-bg);
+}
+.dbg-tests-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.dbg-tests-notes {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 .dbg-count.run b {
   color: var(--accent);
 }

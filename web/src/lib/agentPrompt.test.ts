@@ -116,6 +116,7 @@ function sample(partial?: Partial<DebugAnalysis>): DebugAnalysis {
       connectionSource: 'upi-libvirt-cleanup-pre/build-log.txt',
     },
     progressSummary: 'Failed at upi-install-libvirt',
+    testFailures: null,
     phaseTimings: [
       {
         phase: 'pre',

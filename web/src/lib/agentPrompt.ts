@@ -111,7 +111,36 @@ export function buildAgentPrompt(a: DebugAnalysis): string {
       lines.push(`Additional failed steps: ${a.secondaryFailed.join(', ')}`);
     }
     lines.push('');
-  } else if (a.result === 'RUNNING' && current) {
+  }
+
+  if (a.testFailures && a.testFailures.failures.length) {
+    const tf = a.testFailures;
+    lines.push(section('Failed test cases'));
+    const s = tf.summary;
+    if (s.blockingFail != null) {
+      lines.push(
+        `Suite run summary: ${s.blockingFail} blocking fail, ${s.informingFail ?? 0} informing fail, ${s.pass ?? '?'} pass, ${s.skip ?? '?'} skip`,
+      );
+    }
+    lines.push(`Total listed failures: ${tf.failures.length}`);
+    for (const g of tf.bySuite) {
+      lines.push(`${g.label}: ${g.count}`);
+      for (const t of g.tests.slice(0, g.suite === 'monitor' ? 15 : 40)) {
+        lines.push(
+          `  - [${t.severity}] ${t.name.replace(/\s*\[Suite:[^\]]+\]/g, '').trim()}${
+            t.suiteTag ? ` (Suite:${t.suiteTag})` : ''
+          }`,
+        );
+      }
+      if (g.tests.length > (g.suite === 'monitor' ? 15 : 40)) {
+        lines.push(`  … +${g.tests.length - (g.suite === 'monitor' ? 15 : 40)} more`);
+      }
+    }
+    for (const j of tf.junitFiles) lines.push(`JUnit: ${j.url}`);
+    lines.push('');
+  }
+
+  if (!(a.firstFailed || failed.length) && a.result === 'RUNNING' && current) {
     lines.push(section('Currently in progress'));
     lines.push(`Current / next step: ${a.currentStep}`);
     appendStepArtifacts(lines, current);

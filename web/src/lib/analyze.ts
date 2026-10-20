@@ -10,6 +10,7 @@ import {
   enrichMetaFromProwLog,
   parseJobMeta,
 } from './meta';
+import { collectTestFailures, type TestFailureReport } from './junit';
 import {
   fetchReleaseFromArtifacts,
   mergeReleaseInfo,
@@ -278,6 +279,8 @@ export interface DebugAnalysis extends Analysis {
   lease: LeaseInfo | null;
   progressSummary: string;
   phaseTimings: PhaseTiming[];
+  /** Failing openshift-tests cases when TEST phase failed */
+  testFailures: TestFailureReport | null;
 }
 
 function computePhaseTimings(
@@ -441,6 +444,55 @@ export async function analyzeExecution(
   });
   const configLinks = buildConfigLinks(jobName, meta);
 
+  onProgress?.(92, 'Parsing failed test cases…');
+  let testFailures: TestFailureReport | null = null;
+  const testStepName = 'openshift-e2e-libvirt-test';
+  const testStep = steps[testStepName];
+  const testPhaseFailed =
+    phaseStatus.test === 'failed' || testStep?.status === 'failed';
+  if (testPhaseFailed && testStep) {
+    const gcsStepPrefix = `${gcsPath}/artifacts/${testSubdir ? `${testSubdir}/` : ''}${testStepName}`;
+    testFailures = await collectTestFailures({
+      stepName: testStepName,
+      stepBase: testStep.stepBase,
+      bucket,
+      gcsPathPrefix: gcsStepPrefix,
+      logText: testStep.logText || testStep.logTail,
+      expectedSuite: meta.testType,
+    });
+    if (testFailures?.failures.length) {
+      const blocking = testFailures.failures.filter((f) => f.severity === 'blocking').length;
+      const suites = testFailures.bySuite.map((g) => `${g.count} ${g.label}`).join(', ');
+      diagnosis.facts.push(
+        blocking
+          ? `Failed tests: ${blocking} blocking` +
+              (testFailures.summary.informingFail
+                ? `, ${testFailures.summary.informingFail} informing`
+                : '') +
+              ` (${suites})`
+          : `Failed tests: ${testFailures.failures.length} across ${testFailures.bySuite.length} suite(s) (${suites})`,
+      );
+      for (const g of testFailures.bySuite.slice(0, 4)) {
+        diagnosis.hypotheses.push({
+          tag: g.suite,
+          text: `${g.label}: ${g.tests
+            .slice(0, 3)
+            .map((t) => t.name.replace(/\s*\[Suite:[^\]]+\]/g, '').trim())
+            .join(' · ')}${g.tests.length > 3 ? ` (+${g.tests.length - 3} more)` : ''}`,
+        });
+      }
+      if (testFailures.junitFiles[0]) {
+        diagnosis.evidence.push({
+          label: testFailures.junitFiles[0].name,
+          url: testFailures.junitFiles[0].url,
+          kind: 'junit',
+          primary: true,
+          desc: 'JUnit XML with failed test cases',
+        });
+      }
+    }
+  }
+
   let progressSummary = '';
   if (result === 'RUNNING') {
     if (currentStep) {
@@ -452,7 +504,22 @@ export async function analyzeExecution(
       progressSummary = 'Job is running but the current step could not be inferred.';
     }
   } else if (result === 'FAILED' && firstFailed) {
-    progressSummary = `Failed at ${firstFailed}.`;
+    if (testFailures?.failures.length) {
+      const blocking = testFailures.failures.filter((f) => f.severity === 'blocking');
+      const n = blocking.length || testFailures.failures.length;
+      const topSuite =
+        blocking[0]?.suite ||
+        testFailures.bySuite.find((g) => g.suite !== 'monitor')?.suite ||
+        testFailures.bySuite[0]?.suite;
+      const topLabel = topSuite
+        ? testFailures.bySuite.find((g) => g.suite === topSuite)?.label
+        : null;
+      progressSummary = `Failed at ${firstFailed} — ${n} failing test case(s)${
+        topLabel ? ` (${topLabel})` : ''
+      }.`;
+    } else {
+      progressSummary = `Failed at ${firstFailed}.`;
+    }
   } else if (result === 'PASSED') {
     progressSummary = 'All observed steps passed; job finished successfully.';
   }
@@ -493,5 +560,6 @@ export async function analyzeExecution(
     lease,
     progressSummary,
     phaseTimings,
+    testFailures,
   };
 }
