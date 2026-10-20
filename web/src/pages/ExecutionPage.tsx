@@ -2,6 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { analyzeExecution, type DebugAnalysis, type WorkflowStepView } from '../lib/analyze';
 import { buildAgentPrompt } from '../lib/agentPrompt';
+import {
+  compareToLastGreen,
+  type GreenCompareResult,
+} from '../lib/compare';
 import { fmtDur } from '../lib/gcs';
 import { releaseBrowserLinks } from '../lib/release';
 import { parseExecutionRoute } from '../lib/url';
@@ -54,6 +58,11 @@ export function ExecutionPage() {
   const [open, setOpen] = useState<string | null>(null);
   const [tab, setTab] = useState<PageTab>('debug');
   const [showTech, setShowTech] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [compareBusy, setCompareBusy] = useState(false);
+  const [compareLabel, setCompareLabel] = useState('');
+  const [compareErr, setCompareErr] = useState<string | null>(null);
+  const [compare, setCompare] = useState<GreenCompareResult | null>(null);
   const stepEls = useRef(new Map<string, HTMLElement>());
 
   const registerStepEl = (name: string, el: HTMLElement | null) => {
@@ -89,6 +98,10 @@ export function ExecutionPage() {
     let cancelled = false;
     setError(null);
     setA(null);
+    setCompare(null);
+    setCompareErr(null);
+    setCompareOpen(false);
+    setCompareBusy(false);
     void analyzeExecution(parsed, (p, l) => {
       if (!cancelled) {
         setPct(p);
@@ -160,6 +173,25 @@ export function ExecutionPage() {
   const wfDocs = workflowDocs(wfName);
   const configUrl = a.configLinks.links.find((l) => l.label.includes('ci-operator config'))?.url;
 
+  const runCompare = () => {
+    setCompareOpen(true);
+    setTab('debug');
+    if (compareBusy) return;
+    setCompareBusy(true);
+    setCompareErr(null);
+    setCompareLabel('Looking up previous successful builds…');
+    void compareToLastGreen(a, setCompareLabel)
+      .then((res) => {
+        setCompare(res);
+        if (!res) setCompareErr('No earlier successful run found for this job (within recent history).');
+      })
+      .catch((e) => {
+        setCompare(null);
+        setCompareErr(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => setCompareBusy(false));
+  };
+
   const chips: { label: string; value: string }[] = [
     { label: 'OCP', value: a.meta.ocpVersion || '—' },
     { label: 'Profile', value: a.meta.profile || '—' },
@@ -210,6 +242,15 @@ export function ExecutionPage() {
               Jump to current
             </button>
           )}
+          <button
+            type="button"
+            className="btn"
+            onClick={runCompare}
+            disabled={compareBusy}
+            title="Diff release, lease/LPAR, failed step, and tests vs previous SUCCESS"
+          >
+            {compareBusy ? 'Comparing…' : 'Compare to last green'}
+          </button>
           <button type="button" className="btn" onClick={() => setTab('prompt')}>
             AI prompt
           </button>
@@ -273,6 +314,17 @@ export function ExecutionPage() {
 
           {a.testFailures && a.testFailures.failures.length > 0 ? (
             <TestFailuresPanel report={a.testFailures} />
+          ) : null}
+
+          {compareOpen ? (
+            <ComparePanel
+              busy={compareBusy}
+              label={compareLabel}
+              error={compareErr}
+              result={compare}
+              onClose={() => setCompareOpen(false)}
+              onRetry={runCompare}
+            />
           ) : null}
 
           <section className="dbg-steps-panel">
@@ -447,6 +499,128 @@ function TestFailuresPanel({ report }: { report: TestFailureReport }) {
                 <li key={n}>{n}</li>
               ))}
             </ul>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function ComparePanel({
+  busy,
+  label,
+  error,
+  result,
+  onClose,
+  onRetry,
+}: {
+  busy: boolean;
+  label: string;
+  error: string | null;
+  result: GreenCompareResult | null;
+  onClose: () => void;
+  onRetry: () => void;
+}) {
+  const changed = result?.rows.filter((r) => r.changed) || [];
+  return (
+    <section className="dbg-compare" aria-label="Compare to last green">
+      <div className="dbg-section-head">
+        <h2>Compare to last green</h2>
+        <div className="dbg-section-links">
+          {!busy && (
+            <button type="button" className="btn" onClick={onRetry}>
+              Refresh
+            </button>
+          )}
+          <button type="button" className="btn" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+
+      {busy && (
+        <p className="muted">
+          {label || 'Analyzing previous success…'}
+        </p>
+      )}
+
+      {!busy && error && !result && (
+        <p className="dbg-compare-empty">{error}</p>
+      )}
+
+      {!busy && result && (
+        <>
+          <p className="dbg-compare-lead">
+            Baseline{' '}
+            <Link to={result.baseline.appPath} className="mono">
+              {result.baseline.buildId}
+            </Link>
+            <span className="muted"> · </span>
+            <a href={result.greenUrl} target="_blank" rel="noreferrer">
+              Prow
+            </a>
+            <span className="muted"> · </span>
+            <a href={result.historyUrl} target="_blank" rel="noreferrer">
+              Job history
+            </a>
+            {result.baseline.started ? (
+              <span className="muted">
+                {' '}
+                · green started {new Date(result.baseline.started).toUTCString()}
+              </span>
+            ) : null}
+            {changed.length > 0 ? (
+              <span className="dbg-compare-delta">
+                {' '}
+                · {changed.length} field{changed.length === 1 ? '' : 's'} changed
+              </span>
+            ) : (
+              <span className="muted"> · release / lease / step match green</span>
+            )}
+          </p>
+
+          <div className="dbg-compare-table-wrap">
+            <table className="dbg-compare-table">
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>This run</th>
+                  <th>Last green</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.rows.map((r) => (
+                  <tr key={r.key} className={r.changed ? 'changed' : undefined}>
+                    <th scope="row">{r.label}</th>
+                    <td>
+                      <code>{r.current}</code>
+                    </td>
+                    <td>
+                      <code>{r.baseline}</code>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {result.newFailedTests.length > 0 && (
+            <div className="dbg-compare-tests">
+              <h3>
+                Failing tests vs green
+                <span className="dbg-tests-total">{result.newFailedTests.length}</span>
+              </h3>
+              <ul className="dbg-tests-list">
+                {result.newFailedTests.slice(0, 40).map((t) => (
+                  <li key={t}>
+                    <code>{t}</code>
+                  </li>
+                ))}
+              </ul>
+              {result.newFailedTests.length > 40 ? (
+                <p className="muted">…and {result.newFailedTests.length - 40} more</p>
+              ) : null}
+            </div>
           )}
         </>
       )}
