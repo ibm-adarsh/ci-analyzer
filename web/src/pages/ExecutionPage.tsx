@@ -66,7 +66,11 @@ function phaseForStepName(name: string | null | undefined): WorkflowPhase | null
   return null;
 }
 
-/** Product failures only — drop monitor / informing noise. */
+/**
+ * Product / job-failing tests only.
+ * Prefer authoritative blocking rows (incl. Monitor from test-failures-summary);
+ * otherwise drop monitor / informing JUnit noise.
+ */
 function productFailedTests(report: TestFailureReport): FailedTestCase[] {
   const blocking = report.failures.filter((f) => f.severity === 'blocking');
   if (blocking.length) return blocking;
@@ -566,8 +570,11 @@ function TestFailuresPanel({ report }: { report: TestFailureReport }) {
   const failed = productFailedTests(report);
   if (!failed.length) return null;
 
-  const junitLinks = report.junitFiles.filter(
-    (f) => !/monitor/i.test(f.name),
+  const linked = new Set(
+    failed.map((f) => f.junitFile).filter((n): n is string => Boolean(n)),
+  );
+  const junitLinks = report.junitFiles.filter((f) =>
+    linked.size ? linked.has(f.name) : !/monitor/i.test(f.name),
   );
 
   return (

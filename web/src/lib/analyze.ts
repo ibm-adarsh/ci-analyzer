@@ -516,7 +516,8 @@ export async function analyzeExecution(
           (f.severity !== 'informing' && f.suite !== 'monitor'),
       );
       const productOrAll = product.length ? product : testFailures.failures;
-      const bySuite = testFailures.bySuite.filter((g) => g.suite !== 'monitor');
+      const productSuites = new Set(productOrAll.map((f) => f.suite));
+      const bySuite = testFailures.bySuite.filter((g) => productSuites.has(g.suite));
       const suites = bySuite.map((g) => `${g.count} ${g.label}`).join(', ');
       diagnosis.facts.push(
         `Failed test cases: ${productOrAll.length}${suites ? ` (${suites})` : ''}`,
@@ -534,7 +535,12 @@ export async function analyzeExecution(
             .join(' · ')}${cases.length > 3 ? ` (+${cases.length - 3} more)` : ''}`,
         });
       }
-      const junit = testFailures.junitFiles.find((f) => !/monitor/i.test(f.name));
+      const linkedNames = new Set(
+        productOrAll.map((f) => f.junitFile).filter((n): n is string => Boolean(n)),
+      );
+      const junit =
+        testFailures.junitFiles.find((f) => linkedNames.has(f.name)) ||
+        testFailures.junitFiles.find((f) => !/monitor/i.test(f.name));
       if (junit) {
         diagnosis.evidence.push({
           label: junit.name,

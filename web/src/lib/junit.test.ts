@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   classifySuite,
   extractSuiteTag,
+  isStabilityWrapperTest,
   parseBlockingFailuresFromLog,
   parseFailedTestsFromJunitXml,
   parseJunitFilenamesFromLog,
   parseSuiteRunSummary,
+  parseTestFailuresSummaryJson,
 } from './junit';
 
 const SAMPLE_LOG = `
@@ -69,5 +71,42 @@ describe('junit suite classification', () => {
     expect(fails).toHaveLength(2);
     expect(fails[0].suite).toBe('conformance-parallel');
     expect(fails[1].name).toBe('monitor flake');
+  });
+
+  it('recognizes upgrade stability wrapper test names', () => {
+    expect(
+      isStabilityWrapperTest('Cluster should be stable after installation is complete'),
+    ).toBe(true);
+    expect(
+      isStabilityWrapperTest('Cluster should be stable before test is started'),
+    ).toBe(true);
+    expect(
+      isStabilityWrapperTest(
+        '[Monitor:audit-log-analyzer][sig-api-machinery] API LBs follow /readyz',
+      ),
+    ).toBe(false);
+  });
+
+  it('parses test-failures-summary JSON as authoritative blocking failures', () => {
+    const json = JSON.stringify({
+      Tests: [
+        {
+          Test: {
+            Name: '[Monitor:audit-log-analyzer][sig-api-machinery][Feature:APIServer] API LBs follow /readyz of kube-apiserver and stop sending requests before server shutdowns for external clients',
+          },
+          Suite: { Name: 'openshift-tests-upgrade' },
+          Status: 12,
+        },
+      ],
+      TestCount: 2186,
+    });
+    const fails = parseTestFailuresSummaryJson(json, 'upgrade');
+    expect(fails).toHaveLength(1);
+    expect(fails[0].severity).toBe('blocking');
+    expect(fails[0].source).toBe('failures-summary');
+    expect(fails[0].suite).toBe('monitor');
+    expect(fails[0].name).toContain('API LBs follow /readyz');
+    expect(parseTestFailuresSummaryJson('{"Tests":[]}')).toEqual([]);
+    expect(parseTestFailuresSummaryJson('not-json')).toEqual([]);
   });
 });

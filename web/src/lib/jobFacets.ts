@@ -94,17 +94,11 @@ export function buildJobFacets(meta: JobMeta): JobFacet[] {
     facets.push({
       id: 'workflow',
       label: 'Workflow',
-      value: shortWorkflow(meta.workflow),
+      // Full steps.ci name — short "vpn" looked wrong next to Profile libvirt-*-vpn.
+      value: meta.workflow,
       tone: 'muted',
     });
   }
 
   return facets;
-}
-
-function shortWorkflow(name: string): string {
-  return name
-    .replace(/^openshift-e2e-libvirt-/, '')
-    .replace(/heterogeneous-vpn/, 'hetero-vpn')
-    .replace(/upi-heterogeneous/, 'upi-hetero');
 }

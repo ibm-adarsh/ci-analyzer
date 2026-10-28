@@ -139,7 +139,12 @@ export function buildAgentPrompt(a: DebugAnalysis): string {
         );
       }
       if (cases.length > 40) lines.push(`  … +${cases.length - 40} more`);
-      for (const j of tf.junitFiles.filter((f) => !/monitor/i.test(f.name))) {
+      const linked = new Set(
+        cases.map((t) => t.junitFile).filter((n): n is string => Boolean(n)),
+      );
+      for (const j of tf.junitFiles.filter((f) =>
+        linked.size ? linked.has(f.name) : !/monitor/i.test(f.name),
+      )) {
         lines.push(`JUnit: ${j.url}`);
       }
       lines.push('');

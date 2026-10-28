@@ -14,7 +14,7 @@ export interface FailedTestCase {
   suite: TestSuiteKind;
   /** Raw [Suite:…] tag when present */
   suiteTag: string | null;
-  source: 'blocking-log' | 'junit';
+  source: 'blocking-log' | 'junit' | 'failures-summary';
   junitFile: string | null;
   severity: 'blocking' | 'informing' | 'unknown';
 }
@@ -164,6 +164,58 @@ export function parseJunitFilenamesFromLog(logText: string | null): string[] {
   return [...names];
 }
 
+/**
+ * Upgrade / e2e wrappers that fail whenever the cluster was briefly unstable.
+ * openshift-tests demotes these in test-failures-summary; raw JUnit still lists them.
+ */
+export function isStabilityWrapperTest(name: string): boolean {
+  return /^Cluster should be stable (after installation is complete|before test is started)\b/i.test(
+    name.trim(),
+  );
+}
+
+/**
+ * Parse openshift-tests `test-failures-summary*.json` — the post-flake authoritative
+ * failure list Sippy / Prow spyglass use (often a single Monitor test on upgrades).
+ */
+export function parseTestFailuresSummaryJson(
+  text: string,
+  expectedSuite?: string | null,
+): FailedTestCase[] {
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  if (!data || typeof data !== 'object') return [];
+  const tests = (data as { Tests?: unknown }).Tests;
+  if (!Array.isArray(tests)) return [];
+  const out: FailedTestCase[] = [];
+  for (const row of tests) {
+    if (!row || typeof row !== 'object') continue;
+    const name = (row as { Test?: { Name?: string } }).Test?.Name?.trim();
+    if (!name) continue;
+    const suiteName =
+      (row as { Suite?: { Name?: string } }).Suite?.Name || null;
+    // Prefer [Monitor:…] in the test name; Suite is often openshift-tests-upgrade.
+    const junitHint = /\[Monitor:/i.test(name)
+      ? 'e2e-monitor-tests'
+      : suiteName?.toLowerCase().includes('upgrade')
+        ? 'junit_upgrade'
+        : null;
+    out.push({
+      name,
+      suite: classifySuite(name, junitHint, expectedSuite),
+      suiteTag: extractSuiteTag(name),
+      source: 'failures-summary',
+      junitFile: null,
+      severity: 'blocking',
+    });
+  }
+  return out;
+}
+
 /** Lightweight XML scrape for <testcase>…<failure|error> without a full DOM parser. */
 export function parseFailedTestsFromJunitXml(
   xml: string,
@@ -259,6 +311,22 @@ async function listJunitXmlNames(
   return [...new Set(names)];
 }
 
+/** `test-failures-summary*.json` (+ `_monitor_`) written by openshift-tests. */
+async function listTestFailuresSummaryNames(
+  bucket: string,
+  gcsJunitPrefix: string,
+): Promise<string[]> {
+  const data = await listPrefix(bucket, `${gcsJunitPrefix}test-failures-summary`, {
+    maxResults: 30,
+  });
+  const names: string[] = [];
+  for (const it of data?.items || []) {
+    const base = it.name.split('/').pop() || '';
+    if (base.endsWith('.json')) names.push(base);
+  }
+  return [...new Set(names)];
+}
+
 /**
  * Build a failing-test report for openshift-e2e-libvirt-test (or similar) when
  * the TEST phase failed.
@@ -295,10 +363,30 @@ export async function collectTestFailures(input: {
     url: `${input.stepBase.replace(/\/+$/, '')}/artifacts/junit/${name}`,
   }));
 
+  // Authoritative post-flake list (Sippy / spyglass). Prefer over raw JUnit noise.
+  const fromSummary: FailedTestCase[] = [];
+  const summaryNames = await listTestFailuresSummaryNames(input.bucket, junitPrefix);
+  for (const name of summaryNames) {
+    const url = `${input.stepBase.replace(/\/+$/, '')}/artifacts/junit/${name}`;
+    try {
+      const text = await fetchText(url);
+      if (!text || text === '__REDACTED__') continue;
+      fromSummary.push(...parseTestFailuresSummaryJson(text, input.expectedSuite));
+    } catch {
+      notes.push(`Failed to parse ${name}`);
+    }
+  }
+
   const fromXml: FailedTestCase[] = [];
+  // When test-failures-summary already names the real fails, skip downloading the
+  // multi-MB e2e-monitor JUnit — attach the monitor filename by convention instead.
+  const skipHeavyMonitorXml = fromSummary.length > 0;
+  const monitorXmlName =
+    junitNames.find((n) => /^e2e-monitor-tests/i.test(n)) || null;
   // Parse sequentially — large junit_e2e XMLs (2–3MB) in parallel with monitor
   // can spike memory in the browser tab.
   for (const f of junitFiles) {
+    if (skipHeavyMonitorXml && /monitor/i.test(f.name)) continue;
     try {
       const xml = await fetchText(f.url);
       if (!xml || xml === '__REDACTED__') continue;
@@ -308,35 +396,62 @@ export async function collectTestFailures(input: {
     }
   }
 
-  // Prefer blocking-log names as the authoritative product failures; keep junit-only
-  // cases (common on upgrade jobs / monitor) as additional failures.
-  const blockingNames = new Set(blocking.map((b) => b.name));
-  const junitExtras = fromXml.filter((f) => !blockingNames.has(f.name));
+  const attachJunitMeta = (row: FailedTestCase) => {
+    const hit = fromXml.find((f) => f.name === row.name);
+    if (hit?.junitFile) row.junitFile = hit.junitFile;
+    else if (!row.junitFile && row.suite === 'monitor' && monitorXmlName) {
+      row.junitFile = monitorXmlName;
+    }
+    if (hit?.suiteTag && !row.suiteTag) {
+      row.suiteTag = hit.suiteTag;
+      row.suite = hit.suite;
+    }
+  };
 
-  // If blocking section exists, mark matching junit rows as blocking and drop
-  // duplicate junit copies of the same name (dedupeFailures handles merge).
-  for (const b of blocking) {
-    const hit = fromXml.find((f) => f.name === b.name);
-    if (hit?.junitFile) b.junitFile = hit.junitFile;
-    if (hit?.suiteTag && !b.suiteTag) {
-      b.suiteTag = hit.suiteTag;
-      b.suite = hit.suite;
+  let failures: FailedTestCase[];
+
+  if (fromSummary.length) {
+    for (const s of fromSummary) attachJunitMeta(s);
+    failures = dedupeFailures(fromSummary);
+    notes.push(
+      `Using test-failures-summary (${failures.length} authoritative fail(s); raw JUnit may list demoted stability / informing noise).`,
+    );
+  } else {
+    // Prefer blocking-log names as the authoritative product failures; keep junit-only
+    // cases (common on upgrade jobs / monitor) as additional failures.
+    const blockingNames = new Set(blocking.map((b) => b.name));
+    const junitExtras = fromXml.filter((f) => !blockingNames.has(f.name));
+
+    for (const b of blocking) attachJunitMeta(b);
+
+    failures = dedupeFailures([...blocking, ...junitExtras]);
+
+    // When the log summary says N blocking fails but we only found them in junit_e2e
+    // (no Blocking section — e.g. some upgrade runs), promote non-monitor junit fails.
+    if (!blocking.length && summary.blockingFail && summary.blockingFail > 0) {
+      const candidates = failures.filter(
+        (f) => f.suite !== 'monitor' && !isStabilityWrapperTest(f.name),
+      );
+      const promote = candidates.length
+        ? candidates
+        : failures.filter((f) => f.suite !== 'monitor');
+      for (const f of promote.slice(0, summary.blockingFail)) {
+        f.severity = 'blocking';
+      }
+      notes.push(
+        'No "Blocking test failures" section in log; inferred from JUnit + suite summary.',
+      );
+    }
+
+    // Drop upgrade stability wrappers when a more specific failure exists.
+    const concrete = failures.filter((f) => !isStabilityWrapperTest(f.name));
+    if (concrete.length && concrete.length < failures.length) {
+      failures = concrete;
+      notes.push('Omitted "Cluster should be stable…" wrappers in favor of concrete failures.');
     }
   }
 
-  let failures = dedupeFailures([...blocking, ...junitExtras]);
-
-  // When the log summary says N blocking fails but we only found them in junit_e2e
-  // (no Blocking section — e.g. some upgrade runs), promote non-monitor junit fails.
-  if (!blocking.length && summary.blockingFail && summary.blockingFail > 0) {
-    const candidates = failures.filter((f) => f.suite !== 'monitor');
-    for (const f of candidates.slice(0, summary.blockingFail)) {
-      f.severity = 'blocking';
-    }
-    notes.push('No "Blocking test failures" section in log; inferred from JUnit + suite summary.');
-  }
-
-  if (!failures.length && !junitFiles.length) {
+  if (!failures.length && !junitFiles.length && !summaryNames.length) {
     notes.push('No JUnit XML or blocking failure list found under the test step.');
     return null;
   }
