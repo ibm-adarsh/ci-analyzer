@@ -1,5 +1,5 @@
 :root {
-  --bg: #0c1118;
+  --bg: #0b0e14;
   --bg2: #121821;
   --surface: #161d27;
   --surface2: #1c2532;
@@ -24,6 +24,9 @@
   --font-display: 'Source Serif 4', Georgia, 'Times New Roman', serif;
   --mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
   --shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  /* Wide content rail — fills large monitors without letterboxing. */
+  --shell-max: 1680px;
+  --rail-pad: clamp(20px, 3vw, 40px);
 }
 
 [data-theme='light'] {
@@ -87,40 +90,60 @@ select {
   font: inherit;
 }
 
-.app-shell {
-  max-width: 1240px;
-  margin: 0 auto;
-  padding: 0 24px 56px;
+.app-frame {
   min-height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 56px;
 }
-.app-shell.is-home {
-  max-width: 1120px;
+.app-frame.is-home {
+  --shell-max: 1320px;
 }
-.app-main {
+.app-frame.is-execution,
+.app-frame.is-guide {
+  --shell-max: 1680px;
+}
+.app-rail {
+  width: min(100% - (var(--rail-pad) * 2), var(--shell-max));
+  margin-inline: auto;
   min-width: 0;
 }
+.app-main {
+  flex: 1;
+  min-width: 0;
+  padding-top: 8px;
+}
+.app-frame:not(.is-home) .app-main {
+  padding-top: 20px;
+}
 
+/* Full-bleed sticky header; content stays on the same rail as the page. */
 .topbar {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 18px 0;
-  margin-bottom: 8px;
   position: sticky;
   top: 0;
   z-index: 20;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(12px);
+  width: 100%;
   border-bottom: 1px solid transparent;
+  background:
+    radial-gradient(720px 180px at 8% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
+    color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(14px);
 }
-.app-shell:not(.is-home) .topbar {
+.app-frame:not(.is-home) .topbar {
   border-bottom-color: var(--border);
-  margin-bottom: 18px;
+}
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-height: 64px;
+  padding-block: 12px;
 }
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
   text-decoration: none;
   color: inherit;
@@ -129,46 +152,49 @@ select {
   text-decoration: none;
 }
 .brand-mark {
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
-  background: linear-gradient(145deg, #3d8bfd 0%, #0b4db0 55%, #072f6b 100%);
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #5aa4ff 0%, #2b7fff 42%, #0b4db0 78%, #062a5c 100%);
   color: #fff;
   display: grid;
   place-items: center;
-  font-weight: 750;
-  font-size: 17px;
-  letter-spacing: -0.02em;
+  font-weight: 780;
+  font-size: 1.15rem;
+  letter-spacing: -0.03em;
   flex-shrink: 0;
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 28%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #fff 12%, transparent) inset,
+    0 10px 24px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .brand-text {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
-  line-height: 1.15;
+  line-height: 1.1;
 }
 .brand-name {
-  font-size: 0.95rem;
-  font-weight: 750;
-  letter-spacing: -0.02em;
+  font-size: 1.05rem;
+  font-weight: 780;
+  letter-spacing: -0.03em;
   color: var(--text);
 }
 .brand-sep {
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 550;
+  letter-spacing: 0.01em;
   color: var(--muted);
 }
 .topbar-nav {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 .nav-link {
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: 8px 14px;
+  border-radius: 9px;
   font-size: 0.9rem;
   font-weight: 650;
   color: var(--text2);
@@ -184,12 +210,12 @@ select {
   background: var(--accent-dim);
 }
 .nav-theme {
-  margin-left: 6px;
+  margin-left: 4px;
   border: 1px solid var(--border);
   background: transparent;
   color: var(--muted);
-  border-radius: 8px;
-  padding: 7px 10px;
+  border-radius: 9px;
+  padding: 8px 12px;
   font-size: 0.8rem;
   font-weight: 650;
   cursor: pointer;
@@ -201,11 +227,11 @@ select {
 
 /* ── Home landing ── */
 .home {
-  padding-top: 12px;
+  padding-top: 20px;
 }
 .home-hero {
   position: relative;
-  padding: 36px 32px 32px;
+  padding: clamp(36px, 4vw, 52px) clamp(28px, 3.5vw, 48px) clamp(28px, 3vw, 40px);
   border-radius: 22px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -245,9 +271,9 @@ select {
 }
 .home-hero h1 {
   margin: 0 0 16px;
-  max-width: none;
+  max-width: 18ch;
   font-family: var(--font-display);
-  font-size: clamp(2.05rem, 4.2vw, 2.9rem);
+  font-size: clamp(2.15rem, 4vw, 3.1rem);
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.12;
@@ -910,8 +936,8 @@ select {
 
 /* ── Debug execution view ── */
 .dbg {
-  max-width: 1080px;
-  margin: 0 auto;
+  width: 100%;
+  min-width: 0;
 }
 .dbg-back {
   margin-bottom: 12px;
@@ -941,13 +967,13 @@ select {
 
 .dbg-hero {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: clamp(20px, 3vw, 40px);
   align-items: start;
-  padding: 20px 22px;
-  border-radius: 14px;
+  padding: clamp(20px, 2.2vw, 28px) clamp(22px, 2.5vw, 32px);
+  border-radius: 16px;
   border: 1px solid var(--border);
-  margin-bottom: 14px;
+  margin-bottom: 18px;
   position: relative;
   overflow: hidden;
   background: var(--surface);
@@ -1016,17 +1042,17 @@ select {
   color: var(--text);
 }
 .dbg-summary {
-  margin: 0 0 12px;
-  font-size: 0.95rem;
+  margin: 0 0 14px;
+  font-size: 0.98rem;
   line-height: 1.5;
   color: var(--text2);
-  max-width: 56ch;
+  max-width: min(72ch, 100%);
 }
 .dbg-chips,
 .dbg-facets {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 .dbg-chip,
 .dbg-facet {
@@ -1124,11 +1150,13 @@ select {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-width: 148px;
+  min-width: 168px;
+  padding-top: 2px;
 }
 .dbg-hero-actions .btn {
   justify-content: center;
   text-align: center;
+  min-height: 36px;
 }
 
 .dbg-score {
@@ -1944,8 +1972,8 @@ select {
 
 /* ── Workflow guide (redesign) ── */
 .guide-page {
-  max-width: 1100px;
-  margin: 0 auto;
+  width: 100%;
+  min-width: 0;
 }
 .guide-page-bar {
   display: flex;
@@ -2111,8 +2139,8 @@ select {
 
 .guide-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: clamp(18px, 2vw, 28px);
   align-items: start;
 }
 .guide-main {
