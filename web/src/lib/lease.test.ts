@@ -90,26 +90,26 @@ Imported release 4.14.0-0.nightly-2026-09-30-024514 created at 2026-09-30 02:46:
   });
 
   it('reads observed qemu URI from step logs and prefers it over static map', () => {
+    // Fixture uses a fake FQDN — resolveLpar must shorten it for display.
     const steps = {
       'upi-libvirt-cleanup-post': {
-        logTail:
-          'Using libvirt connection for qemu+tcp://lnxocp04.phc-cicd.cis.ibm.net/system\n',
-        logText:
-          'Using libvirt connection for qemu+tcp://lnxocp04.phc-cicd.cis.ibm.net/system\n',
+        logTail: 'Using libvirt connection for qemu+tcp://lnxocp04.example.test/system\n',
+        logText: 'Using libvirt connection for qemu+tcp://lnxocp04.example.test/system\n',
       },
     };
     const conn = parseLibvirtConnectionFromSteps(steps);
-    expect(conn?.hostname).toBe('lnxocp04.phc-cicd.cis.ibm.net');
-    expect(conn?.qemuUri).toBe('qemu+tcp://lnxocp04.phc-cicd.cis.ibm.net/system');
+    expect(conn?.hostname).toBe('lnxocp04.example.test');
+    expect(conn?.qemuUri).toBe('qemu+tcp://lnxocp04.example.test/system');
 
     const lease = extractLeaseInfo(SAMPLE_PROW, steps);
     expect(lease?.slot).toBe('libvirt-s390x-2-3');
-    expect(lease?.hostname).toBe('lnxocp04.phc-cicd.cis.ibm.net');
+    expect(lease?.hostname).toBe('lnxocp04.example.test');
 
     const lpar = resolveLpar(lease!.slot, lease);
     expect(lpar?.lpar).toBe('lnxocp04');
     expect(lpar?.observed).toBe(true);
-    expect(lpar?.qemuUri).toBe('qemu+tcp://lnxocp04.phc-cicd.cis.ibm.net/system');
+    expect(lpar?.hostname).toBe('lnxocp04');
+    expect(lpar?.qemuUri).toBe('qemu+tcp://lnxocp04/system');
   });
 
   it('static map for lease index 2 is lnxocp04 (not the obsolete lnxocp06)', () => {

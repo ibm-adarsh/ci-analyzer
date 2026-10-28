@@ -87,7 +87,7 @@ export function parseLeaseFromSteps(
 
 /**
  * Authoritative host comes from the leases secret, printed by steps as:
- *   Using libvirt connection for qemu+tcp://lnxocp04.phc-cicd.cis.ibm.net/system
+ *   Using libvirt connection for qemu+tcp://<hostname>/system
  */
 export function parseLibvirtConnectionFromSteps(
   steps: Record<string, Pick<StepResult, 'logTail' | 'logText'> | undefined>,

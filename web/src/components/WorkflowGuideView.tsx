@@ -281,7 +281,7 @@ function whenToUse(wf: GuideWorkflow): string[] {
     case 'vpn':
       return [
         'Most multi-z-z nightlies (parallel, serial, agent, image-ecosystem, upgrades)',
-        'Profile libvirt-s390x-vpn on YZ LPARs (lnxocp01/02/04)',
+        'Profile libvirt-s390x-vpn on YZ LPARs',
       ];
     case 'vpn-fips':
       return [

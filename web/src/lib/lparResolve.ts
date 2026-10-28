@@ -3,18 +3,24 @@ import {
   LPAR_MAP,
   LPAR_MAP_OZ,
   leaseRecordToLpar,
+  shortHostname,
   type LparInfo,
 } from '../data/lpar';
 import type { LeaseInfo } from './lease';
 
-function shortHost(hostname: string): string {
-  return hostname.split('.')[0] || hostname;
+function redactQemuUri(uri: string | null | undefined): string | null {
+  if (!uri) return null;
+  return uri.replace(
+    /^(qemu\+tcp:\/\/)([^/:]+)(.*)$/i,
+    (_m, scheme: string, host: string, rest: string) =>
+      `${scheme}${shortHostname(host) || host}${rest || '/system'}`,
+  );
 }
 
 /**
  * Resolve Boskos lease slot → LPAR host details.
- * When LeaseInfo includes an observed qemu URI/hostname from step logs, that wins
- * over the static catalog (the leases secret is authoritative).
+ * Observed step-log hostnames win over the static catalog, but FQDNs are
+ * shortened so internal DNS domains never linger in the UI.
  */
 export function resolveLpar(slot: string, lease?: LeaseInfo | null): LparInfo | null {
   if (!slot) return null;
@@ -22,19 +28,20 @@ export function resolveLpar(slot: string, lease?: LeaseInfo | null): LparInfo | 
   const fromMap = resolveFromMap(slot);
 
   if (lease?.hostname || lease?.qemuUri) {
-    const host = lease.hostname || '';
-    const short = host ? shortHost(host) : undefined;
+    const rawHost = lease.hostname || '';
+    const short = shortHostname(rawHost) || shortHostname(lease.qemuUri) || undefined;
     return {
       ...(fromMap || {
-        lpar: short || host || 'unknown',
+        lpar: short || 'unknown',
         sshd: '',
         zone: 'OZ',
-        tcpPort: 16509,
       }),
-      lpar: short || fromMap?.lpar || host || 'unknown',
-      hostname: host || fromMap?.hostname,
+      lpar: short || fromMap?.lpar || 'unknown',
+      hostname: short || fromMap?.hostname,
       pool: lease.pool || fromMap?.pool,
-      qemuUri: lease.qemuUri || (host ? `qemu+tcp://${host}/system` : fromMap?.qemuUri),
+      qemuUri:
+        redactQemuUri(lease.qemuUri) ||
+        (short ? `qemu+tcp://${short}/system` : fromMap?.qemuUri),
       observed: true,
     };
   }
@@ -49,15 +56,16 @@ function resolveFromMap(slot: string): LparInfo | null {
     return leaseRecordToLpar(rec, slotNumM ? Number(slotNumM[1]) : undefined);
   }
 
-  // Legacy fallbacks for patterns not in the catalog
   const oz = slot.match(/^libvirt-s390x-oz-(\d+)-(\d+)$/);
   if (oz) {
     const base = LPAR_MAP_OZ[Number(oz[1])];
     if (!base) return null;
+    const host = shortHostname(base.hostname) || base.lpar;
     return {
       ...base,
+      hostname: host,
       slotNum: Number(oz[2]),
-      qemuUri: `qemu+tcp://${base.hostname || base.lpar}/system`,
+      qemuUri: `qemu+tcp://${host}/system`,
       observed: false,
     };
   }
@@ -66,10 +74,12 @@ function resolveFromMap(slot: string): LparInfo | null {
   if (std) {
     const base = LPAR_MAP[Number(std[1])];
     if (!base) return null;
+    const host = shortHostname(base.hostname) || base.lpar;
     return {
       ...base,
+      hostname: host,
       slotNum: Number(std[2]),
-      qemuUri: `qemu+tcp://${base.hostname || base.lpar}/system`,
+      qemuUri: `qemu+tcp://${host}/system`,
       observed: false,
     };
   }

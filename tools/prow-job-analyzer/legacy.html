@@ -2259,7 +2259,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
       <div class="wf-conn-diagram">
         <span class="wf-conn-node ci">CI Pod (OpenShift)</span>
         <span class="wf-conn-arrow">──VPN──▶</span>
-        <span class="wf-conn-node bastn">bastion-z.svc (CoreDNS)</span>
+        <span class="wf-conn-node bastn">bastion.svc (CoreDNS)</span>
         <span class="wf-conn-arrow">──qemu+tcp:16509──▶</span>
         <span class="wf-conn-node lpar">IBM Z LPAR (lnxocp0X)</span>
         <span class="wf-conn-arrow">──virsh/libvirt──▶</span>
@@ -2891,7 +2891,7 @@ const FAIL_PATTERNS = [
   { re: /Failed to acquire lease|Couldn.t find.*lease/i, category:'Boskos Lease',          hint:'Boskos could not acquire an <code>libvirt-s390x-vpn-quota-slice</code> lease. Either pool exhausted or VPN/bastion connectivity broken. Check <a href="https://boskos-metrics.ci.openshift.org/" target="_blank">Boskos metrics</a>.' },
   { re: /boskos.*failed|lease.*expired/i,                category:'Boskos Lease Expired',  hint:'Boskos lease expired during the job (max 6h). Job ran too long — check upi-install-libvirt or e2e test duration for extreme latency.' },
   { re: /virsh.*failed|virsh.*error/i,                   category:'Virsh Error',           hint:'virsh command failed on the IBM Z LPAR. Check if the hypervisor is responsive and the libvirt daemon is running on the LPAR host.' },
-  { re: /Connection refused.*qemu\+tcp|qemu\+tcp.*refused/i, category:'Hypervisor Unreachable', hint:'Could not connect to the LPAR hypervisor via <code>qemu+tcp</code>. VPN or bastion tunnel may be broken. Check <code>bastion-z.svc.cluster.local</code> DNS and VPN connectivity.' },
+  { re: /Connection refused.*qemu\+tcp|qemu\+tcp.*refused/i, category:'Hypervisor Unreachable', hint:'Could not connect to the LPAR hypervisor via <code>qemu+tcp</code>. VPN or bastion tunnel may be broken. Check <code>bastion.svc</code> DNS and VPN connectivity.' },
   // Bootstrap / install
   { re: /bootstrap-complete.*timeout|timeout.*bootstrap/i, category:'Bootstrap Timeout',   hint:'Cluster bootstrap did not complete in 30 min. Check: (1) VM boot via virsh, (2) network connectivity on the libvirt bridge, (3) DNS resolution on the LPAR, (4) <code>.openshift_install.log</code>.' },
   { re: /install-complete.*timeout|timeout.*install/i,    category:'Install Timeout',      hint:'Worker nodes did not join in time. Check CSR approval, MachineConfig, and network connectivity. See <code>.openshift_install.log</code>.' },
@@ -3959,7 +3959,7 @@ function renderMeta(a) {
             </div>
             <div class="lease-kv">
               <div class="lease-k">DNS svc</div>
-              <div class="lease-v lv-normal" style="font-size:11px">${esc(sshdSvc)}.bastion-z.svc.cluster.local</div>
+              <div class="lease-v lv-normal" style="font-size:11px">${esc(sshdSvc)}.bastion.svc</div>
             </div>
             <div class="lease-kv">
               <div class="lease-k">Pool</div>
@@ -4723,7 +4723,7 @@ async function renderJunitPanel(a) {
 //   lnxocp14   sshd-14    libvirt-s390x-oz-3-0 … 3-3  Orange Zone
 //
 // Connection: qemu+tcp://lnxocp0X:16509/system  (resolves via CoreDNS:
-//   lnxocp0X → sshd-X.bastion-z.svc.cluster.local:16509)
+//   lnxocp0X → sshd-X.bastion.svc:16509)
 const LPAR_MAP = {
   // libvirt-s390x-vpn — lnxocp01/02/06  (libvirt-s390x-<lpar>-<slot>)
   0: { lpar:'lnxocp01', sshd:'sshd-0',  zone:'OZ', profile:'libvirt-s390x-vpn',    pool:'libvirt-s390x-vpn-quota-slice',    tcpPort:16509 },
@@ -5216,7 +5216,7 @@ function renderDebug(a) {
   const leaseSlot  = leaseInfo?.slot || null;
   const lpar = leaseSlot ? resolveLpar(leaseSlot) : null;
   const lparDesc = lpar
-    ? `<code>${esc(leaseSlot)}</code> → <strong>${esc(lpar.lpar)}</strong> (qemu+tcp: <code>${esc(lpar.qemuUri||'')}</code>, DNS svc: <code>${esc(lpar.sshd||'—')}.bastion-z.svc.cluster.local</code>, Orange Zone)`
+    ? `<code>${esc(leaseSlot)}</code> → <strong>${esc(lpar.lpar)}</strong> (qemu+tcp: <code>${esc(lpar.qemuUri||'')}</code>, DNS svc: <code>${esc(lpar.sshd||'—')}.bastion.svc</code>, Orange Zone)`
     : `Format: <code>libvirt-s390x-X-Y</code> or <code>libvirt-s390x-oz-X-Y</code> — all Orange Zone`;
 
   const items = [
@@ -5231,7 +5231,7 @@ function renderDebug(a) {
       text:`<strong>[POST] Must-gather:</strong> If FAILED → cluster too degraded. Download <a href="${artBase}/must-gather.tar" target="_blank">must-gather.tar ↗</a>. Check <a href="${artBase}/gather-extra/build-log.txt" target="_blank">gather-extra ↗</a> for operator/node health.` },
     { ok: isOk('upi-libvirt-cleanup-post') && isOk('upi-libvirt-cleanup-heterogeneous-post'), icon:'♻️',
       text:`<strong>[POST] Cleanup:</strong> Failure leaves stale virsh resources → next run fails at install with "storage volume already exists". <a href="${artBase}/upi-libvirt-cleanup-post/build-log.txt" target="_blank">log ↗</a>` },
-    { ok:true, icon:'🖥️', text:`<strong>IBM Z LPAR:</strong> ${lparDesc}. All LPARs are Orange Zone. libvirt-s390x-vpn: lnxocp01/02/06 (sshd-0/1/2). libvirt-s390x-vpn-oz: lnxocp11–14 (sshd-11–14). Connection: qemu+tcp via CoreDNS rewrite to bastion-z.svc. ETCD on ramfs (ETCD_DISK_SPEED=slow).` },
+    { ok:true, icon:'🖥️', text:`<strong>IBM Z LPAR:</strong> ${lparDesc}. All LPARs are Orange Zone. libvirt-s390x-vpn: lnxocp01/02/06 (sshd-0/1/2). libvirt-s390x-vpn-oz: lnxocp11–14 (sshd-11–14). Connection: qemu+tcp via CoreDNS rewrite to bastion.svc. ETCD on ramfs (ETCD_DISK_SPEED=slow).` },
     { ok:true, icon:'⬆️', text:`<strong>Upgrade jobs:</strong> ${meta.fromVersion||'?'} → ${meta.ocpVersion||'?'}. Uses <code>openshift-tests run-upgrade all</code>. MonitorTest 503 failures are often CI infra issues — check <a href="https://prow.ci.openshift.org/job-history/gs/${bucket}/${gcsPath.replace(/\/\d+$/,'')}" target="_blank">job history ↗</a> for pattern.` },
     { ok:true, icon:'🔗', text:`<a href="https://prow.ci.openshift.org/job-history/gs/${bucket}/${gcsPath.replace(/\/\d+$/,'')}" target="_blank">Job History ↗</a> · <a href="https://storage.googleapis.com/${bucket}/${gcsPath}/artifacts/" target="_blank">All Artifacts ↗</a> · <a href="https://boskos-metrics.ci.openshift.org/" target="_blank">Boskos Metrics ↗</a>` },
   ];

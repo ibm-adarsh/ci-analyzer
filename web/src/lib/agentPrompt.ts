@@ -63,10 +63,16 @@ export function buildAgentPrompt(a: DebugAnalysis): string {
   if (a.leaseSlot) {
     lines.push(`Boskos lease: ${a.leaseSlot}`);
     if (a.lease?.pool) lines.push(`Boskos pool: ${a.lease.pool}`);
-    if (a.lease?.qemuUri) {
-      lines.push(`Libvirt URI (from ${a.lease.connectionSource || 'step log'}): ${a.lease.qemuUri}`);
-    } else if (a.lease?.hostname) {
-      lines.push(`LPAR hostname: ${a.lease.hostname}`);
+    // Prefer short host labels — never copy internal FQDNs into the prompt.
+    const shortHost = (a.lease?.hostname || '').split('.')[0] || null;
+    const qemuShort = a.lease?.qemuUri?.replace(
+      /^(qemu\+tcp:\/\/)([^/:]+)/i,
+      (_m, scheme: string, host: string) => `${scheme}${host.split('.')[0]}`,
+    );
+    if (qemuShort) {
+      lines.push(`Libvirt URI (from ${a.lease?.connectionSource || 'step log'}): ${qemuShort}`);
+    } else if (shortHost) {
+      lines.push(`LPAR hostname: ${shortHost}`);
     }
   }
   if (a.release?.tag) {

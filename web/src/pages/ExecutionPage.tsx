@@ -754,7 +754,13 @@ function JobDetailsPanel({
   onToggle: () => void;
 }) {
   const docs = workflowDocs(a.meta.workflow || wfName);
-  const qemu = a.lease?.qemuUri || lpar?.qemuUri || null;
+  const qemuRaw = a.lease?.qemuUri || lpar?.qemuUri || null;
+  const qemu = qemuRaw
+    ? qemuRaw.replace(
+        /^(qemu\+tcp:\/\/)([^/:]+)/i,
+        (_m, scheme: string, host: string) => `${scheme}${host.split('.')[0]}`,
+      )
+    : null;
   const cfgLabel = a.configLinks.variant
     ? `${a.configLinks.org}-${a.configLinks.repo}-${a.configLinks.branch}__${a.configLinks.variant}.yaml`
     : null;

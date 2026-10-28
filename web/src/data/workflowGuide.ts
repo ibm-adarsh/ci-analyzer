@@ -616,7 +616,7 @@ export const GUIDE_WORKFLOWS: GuideWorkflow[] = [
     name: 'openshift-e2e-libvirt-heterogeneous-vpn',
     title: 'Heterogeneous VPN (z-xz on 5.0 · z-za)',
     summary:
-      'Lease-aware VPN hetero: s390x control plane plus amd64 or arm64 workers on lnxocp11 carve-outs (vpn-amd64 / arm64 leases with VXLAN).',
+      'Lease-aware VPN hetero: s390x control plane plus amd64 or arm64 workers (vpn-amd64 / arm64 leases with VXLAN).',
     since: '5.0+',
     profiles: ['libvirt-s390x-vpn-amd64', 'libvirt-s390x-vpn-arm64'],
     stepsCi: stepCi('workflow', 'openshift-e2e-libvirt-heterogeneous-vpn'),
@@ -658,16 +658,16 @@ export const CLUSTER_PROFILES: ClusterProfileInfo[] = [
   {
     id: 'libvirt-s390x-vpn-oz',
     title: 'libvirt-s390x-vpn-oz',
-    summary: 'OZ lab VPN profile (lnxocp11–14). Same VPN workflow family as YZ.',
+    summary: 'OZ lab VPN profile. Same VPN workflow family as YZ.',
     usage: 'Boskos oz leases; some slots carved out for hetero amd64/arm64 and HCP.',
     connectivity: 'Prow → VPN → OZ LPAR qemu+tcp.',
-    typicalJobs: ['operator jobs on vpn-oz', 'shared with hetero carve-outs on lnxocp11'],
+    typicalJobs: ['operator jobs on vpn-oz', 'shared with hetero carve-outs'],
     status: 'specialized',
   },
   {
     id: 'libvirt-s390x-vpn-amd64',
     title: 'libvirt-s390x-vpn-amd64',
-    summary: 'VPN hetero: s390x CP + amd64 workers (lnxocp11 + xkvmocp08, VXLAN).',
+    summary: 'VPN hetero: s390x CP + amd64 workers (VXLAN).',
     usage: '5.0 multi-z-xz with openshift-e2e-libvirt-heterogeneous-vpn.',
     connectivity: 'Primary Z LPAR + x86 HV over VPN VXLAN (ocp1-amd / ocp3-amd).',
     typicalJobs: ['ocp-e2e-ovn-remote-libvirt-multi-z-xz (5.0)'],
@@ -685,7 +685,7 @@ export const CLUSTER_PROFILES: ClusterProfileInfo[] = [
   {
     id: 'libvirt-s390x-vpn-arm64',
     title: 'libvirt-s390x-vpn-arm64',
-    summary: 'VPN hetero: s390x CP + arm64 workers (lnxocp11 + akvmocp03, VXLAN ocp2-arm).',
+    summary: 'VPN hetero: s390x CP + arm64 workers (VXLAN ocp2-arm).',
     usage: 'multi-z-za with openshift-e2e-libvirt-heterogeneous-vpn. Lease libvirt-s390x-arm64-0-0.',
     connectivity: 'Primary Z LPAR + arm64 HV over VPN/bastion.',
     typicalJobs: ['ocp-e2e-ovn-remote-libvirt-multi-z-za'],
