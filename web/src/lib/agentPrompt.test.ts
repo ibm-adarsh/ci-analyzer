@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { DebugAnalysis } from './analyze';
 import {
   buildAgentPrompt,
+  buildGoogleAiModeQuery,
   buildGoogleAskBrief,
+  GOOGLE_AI_MODE_MAX_CHARS,
   GOOGLE_ASK_MAX_CHARS,
-  googleAiStudioAskUrl,
+  googleAiModeAskUrl,
 } from './agentPrompt';
 
 function sample(partial?: Partial<DebugAnalysis>): DebugAnalysis {
@@ -186,14 +188,25 @@ describe('buildAgentPrompt', () => {
 });
 
 describe('buildGoogleAskBrief', () => {
-  it('stays compact and encodes into an AI Studio URL', () => {
+  it('stays compact for clipboard / Gemini paste', () => {
     const brief = buildGoogleAskBrief(sample());
     expect(brief.length).toBeLessThanOrEqual(GOOGLE_ASK_MAX_CHARS);
     expect(brief).toContain('Concise root-cause');
     expect(brief).toContain('upi-install-libvirt');
     expect(brief).toContain('prow.ci.openshift.org');
-    const url = googleAiStudioAskUrl(brief);
-    expect(url.startsWith('https://aistudio.google.com/prompts/new_chat?prompt=')).toBe(true);
+  });
+});
+
+describe('buildGoogleAiModeQuery', () => {
+  it('fits AI Mode and encodes into a udm=50 URL', () => {
+    const q = buildGoogleAiModeQuery(sample());
+    expect(q.length).toBeLessThanOrEqual(GOOGLE_AI_MODE_MAX_CHARS);
+    expect(q).toContain('IBM Z OpenShift CI failure');
+    expect(q).toContain('upi-install-libvirt');
+    expect(q).not.toMatch(/\n/);
+    const url = googleAiModeAskUrl(q);
+    expect(url.startsWith('https://www.google.com/search?udm=50&hl=en&q=')).toBe(true);
     expect(url).toContain(encodeURIComponent('upi-install-libvirt'));
+    expect(url).not.toContain('aistudio.google.com');
   });
 });

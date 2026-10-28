@@ -3,8 +3,9 @@ import { Link, useParams } from 'react-router-dom';
 import { analyzeExecution, type DebugAnalysis, type WorkflowStepView } from '../lib/analyze';
 import {
   buildAgentPrompt,
+  buildGoogleAiModeQuery,
   buildGoogleAskBrief,
-  googleAiStudioAskUrl,
+  googleAiModeAskUrl,
 } from '../lib/agentPrompt';
 import {
   compareToLastGreen,
@@ -1003,6 +1004,7 @@ function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
   const passed = a.result === 'PASSED';
   const prompt = useMemo(() => (passed ? '' : buildAgentPrompt(a)), [a, passed]);
   const googleBrief = useMemo(() => (passed ? '' : buildGoogleAskBrief(a)), [a, passed]);
+  const googleQuery = useMemo(() => (passed ? '' : buildGoogleAiModeQuery(a)), [a, passed]);
 
   if (passed) {
     const short = shortJob(a.jobName);
@@ -1057,15 +1059,27 @@ function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
   }
 
   async function askGoogleAi() {
+    // Prefer AI Mode (udm=50): works without AI Studio, which many Workspace orgs disable.
     const ok = await writeClipboard(prompt);
-    const url = googleAiStudioAskUrl(googleBrief);
+    const url = googleAiModeAskUrl(googleQuery || googleBrief);
     window.open(url, '_blank', 'noopener,noreferrer');
     setAskNote(
       ok
-        ? 'Opened Google AI Studio with a compact brief. Full prompt is on the clipboard — paste (⌘V / Ctrl+V) if you want log tails too. Free Google sign-in; no API key stored here.'
-        : 'Opened Google AI Studio with a compact brief. Clipboard copy failed — use Copy prompt if you need the full log tails.',
+        ? 'Opened Google AI Mode with a short failure query. Full agent prompt is on the clipboard — use “Paste in Gemini” if AI Mode is thin or CAPTCHA’d.'
+        : 'Opened Google AI Mode with a short failure query. Clipboard copy failed — use Copy prompt for the full brief.',
     );
-    window.setTimeout(() => setAskNote(null), 10000);
+    window.setTimeout(() => setAskNote(null), 12000);
+  }
+
+  async function pasteInGemini() {
+    const ok = await writeClipboard(prompt);
+    window.open('https://gemini.google.com/app', '_blank', 'noopener,noreferrer');
+    setAskNote(
+      ok
+        ? 'Opened Gemini and copied the full prompt. Click the chat box and paste (⌘V / Ctrl+V), then send. Use a personal/guest Google login if Workspace blocks Gemini.'
+        : 'Opened Gemini, but clipboard copy failed — use Copy prompt, then paste manually.',
+    );
+    window.setTimeout(() => setAskNote(null), 12000);
   }
 
   return (
@@ -1080,6 +1094,9 @@ function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
           <button type="button" className="btn btn-primary" onClick={() => void askGoogleAi()}>
             Ask Google AI
           </button>
+          <button type="button" className="btn" onClick={() => void pasteInGemini()}>
+            Paste in Gemini
+          </button>
           <button type="button" className="btn" onClick={() => void copy()}>
             {copied ? 'Copied ✓' : 'Copy prompt'}
           </button>
@@ -1087,16 +1104,16 @@ function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
       </div>
       {askNote && <p className="prompt-ask-note">{askNote}</p>}
       <p className="muted prompt-ask-hint">
-        Ask Google AI opens the free Google AI Studio chat (sign-in, no API key in this app) with a
-        condensed failure brief prefilled. There is no official no-key Gemini HTTP API — scraping
-        or anonymous “public edge” proxies are unsafe and unsupported.
+        Ask Google AI uses Search AI Mode (no API key, no AI Studio — Workspace often blocks Studio).
+        Paste in Gemini opens gemini.google.com with the full prompt already copied for one paste.
       </p>
       <pre className="prompt-box" tabIndex={0}>
         {prompt}
       </pre>
       <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-        ~{prompt.length.toLocaleString()} characters
-        {googleBrief ? ` · Google brief ~${googleBrief.length.toLocaleString()} chars` : ''}.
+        ~{prompt.length.toLocaleString()} characters · AI Mode query ~
+        {(googleQuery || googleBrief).length.toLocaleString()} chars
+        {googleBrief ? ` · paste brief ~${googleBrief.length.toLocaleString()}` : ''}.
       </p>
     </section>
   );

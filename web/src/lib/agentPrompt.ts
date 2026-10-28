@@ -16,17 +16,27 @@ function section(title: string): string {
   return `${title}\n${'-'.repeat(Math.min(title.length, 48))}`;
 }
 
-/** Soft cap so encodeURIComponent(url) stays under common browser URL limits. */
+/** Soft cap for a richer clipboard/Gemini paste brief (URL transport is tighter). */
 export const GOOGLE_ASK_MAX_CHARS = 1800;
 
 /**
- * Compact brief for Google AI Studio / AI Mode (no API key).
- * Full log tails do not fit URL transport — pair with clipboard copy of buildAgentPrompt.
+ * Google AI Mode query box is short (~400). Keep the URL query under this so it
+ * is not rejected/truncated into nonsense.
  */
-export function buildGoogleAskBrief(a: DebugAnalysis): string {
-  const shortJob = a.jobName
+export const GOOGLE_AI_MODE_MAX_CHARS = 380;
+
+function shortJobName(jobName: string): string {
+  return jobName
     .replace(/^periodic-ci-openshift-multiarch-main-nightly-/, '')
     .replace(/^periodic-ci-openshift-multiarch-master-nightly-/, '');
+}
+
+/**
+ * Compact brief for paste into Gemini / agents (no API key).
+ * Full log tails still live in buildAgentPrompt — pair with clipboard copy.
+ */
+export function buildGoogleAskBrief(a: DebugAnalysis): string {
+  const shortJob = shortJobName(a.jobName);
   const lines: string[] = [];
   lines.push(
     'Concise root-cause analysis for this IBM Z (s390x / libvirt VPN) OpenShift CI failure. Prefer evidence over speculation. Reply with: (1) primary failure vs secondary, (2) 2–4 next checks, (3) what is still missing.',
@@ -70,7 +80,39 @@ export function buildGoogleAskBrief(a: DebugAnalysis): string {
   return trimToMax(lines.join('\n'), GOOGLE_ASK_MAX_CHARS);
 }
 
-/** Google AI Studio free web UI — prefill via ?prompt= (Google sign-in, no API key). */
+/**
+ * Ultra-short query for Google Search AI Mode (udm=50). Works without AI Studio
+ * and without a developer API key — important for Workspace accounts that block Studio.
+ */
+export function buildGoogleAiModeQuery(a: DebugAnalysis): string {
+  const shortJob = shortJobName(a.jobName);
+  const failedTests = (a.testFailures?.failures || [])
+    .filter(
+      (f) =>
+        f.severity === 'blocking' ||
+        (f.severity !== 'informing' && f.suite !== 'monitor'),
+    )
+    .slice(0, 2)
+    .map((t) => t.name.replace(/\s*\[Suite:[^\]]+\]/g, '').trim().slice(0, 60));
+  const parts = [
+    'IBM Z OpenShift CI failure — concise root cause + next 3 checks.',
+    `Job ${shortJob}.`,
+    a.firstFailed ? `Failed step: ${a.firstFailed}.` : null,
+    failedTests.length ? `Tests: ${failedTests.join('; ')}.` : null,
+    a.diagnosis.facts[0] ? `Fact: ${a.diagnosis.facts[0].slice(0, 90)}.` : null,
+    `Prow: ${a.raw}`,
+  ].filter(Boolean) as string[];
+  // AI Mode strips newlines in q= — keep a single flattened line.
+  return trimToMax(parts.join(' ').replace(/\s+/g, ' ').trim(), GOOGLE_AI_MODE_MAX_CHARS);
+}
+
+/** Google Search AI Mode — free Gemini-backed answers, no AI Studio / API key. */
+export function googleAiModeAskUrl(query: string): string {
+  const flat = query.replace(/\r?\n+/g, ' ').replace(/\s+/g, ' ').trim();
+  return `https://www.google.com/search?udm=50&hl=en&q=${encodeURIComponent(flat)}`;
+}
+
+/** @deprecated Prefer googleAiModeAskUrl — AI Studio is often blocked on Workspace. */
 export function googleAiStudioAskUrl(brief: string): string {
   const flat = brief.replace(/\r\n/g, '\n').trim();
   return `https://aistudio.google.com/prompts/new_chat?prompt=${encodeURIComponent(flat)}`;
