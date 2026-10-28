@@ -209,13 +209,13 @@ const VPN_LEAF_STEPS: GuideStep[] = [
     ocpStage: 'openshift-install · bootstrap → install-complete',
     summary: 'Create VMs, run openshift-install, wait for bootstrap-complete and install-complete.',
     detail:
-      'The core of UPI on libvirt: virt-install/virsh define+start, then openshift-install create cluster (or agent path). Maps to the documented install phases: create manifests/ignition (earlier), bootstrap, approve CSRs, wait for cluster operators. Primary evidence: .openshift_install.log.',
+      'The core of UPI on libvirt: virt-install/virsh define+start, then openshift-install create cluster (or agent path). Maps to the documented install phases: create manifests/ignition (earlier), bootstrap, approve CSRs, wait for cluster operators. Primary evidence: artifacts/.openshift_install.log.',
     whenFails:
-      'Open .openshift_install.log first (not only build-log). Bootstrap timeout, CSR approval, and “volume already exists” dominate Z failures.',
+      'Open artifacts/.openshift_install.log first (not only build-log). Bootstrap timeout, CSR approval, and “volume already exists” dominate Z failures.',
     via: 'upi-install-libvirt',
     stepsCi: stepCi('ref', 'upi-install-libvirt'),
     releaseYaml: refUrl('upi/install/libvirt/upi-install-libvirt-ref.yaml'),
-    keyArtifacts: ['build-log.txt', '.openshift_install.log'],
+    keyArtifacts: ['build-log.txt', 'artifacts/.openshift_install.log'],
   },
   {
     name: 'openshift-e2e-libvirt-conf',
@@ -242,7 +242,7 @@ const VPN_LEAF_STEPS: GuideStep[] = [
     via: 'openshift-e2e-libvirt-test',
     stepsCi: stepCi('ref', 'openshift-e2e-libvirt-test'),
     releaseYaml: refUrl('openshift/e2e/libvirt/test/openshift-e2e-libvirt-test-ref.yaml'),
-    keyArtifacts: ['build-log.txt', 'junit*.xml', 'e2e.log'],
+    keyArtifacts: ['build-log.txt', 'artifacts/junit/', 'artifacts/e2e.log'],
   },
   {
     name: 'ipi-conf-debug-kdump-gather-logs',
@@ -263,7 +263,7 @@ const VPN_LEAF_STEPS: GuideStep[] = [
     bestEffort: true,
     via: 'gather',
     stepsCi: stepCi('ref', 'gather-must-gather'),
-    keyArtifacts: ['must-gather.tar.gz', 'camgi.html'],
+    keyArtifacts: ['artifacts/must-gather.tar.gz', 'artifacts/camgi.html'],
   },
   {
     name: 'gather-extra',
@@ -396,11 +396,11 @@ const HETERO_VPN_LEAF_STEPS: GuideStep[] = [
     phase: 'pre',
     ocpStage: 'openshift-install · s390x control plane',
     summary: 'Create the s390x control-plane / compute guests via openshift-install.',
-    detail: 'Primary evidence: .openshift_install.log under this step.',
-    whenFails: 'Open .openshift_install.log; confirm bootstrap and install-complete.',
+    detail: 'Primary evidence: artifacts/.openshift_install.log under this step.',
+    whenFails: 'Open artifacts/.openshift_install.log; confirm bootstrap and install-complete.',
     via: 'upi-install-libvirt-heterogeneous',
     stepsCi: stepCi('ref', 'upi-install-libvirt'),
-    keyArtifacts: ['build-log.txt', '.openshift_install.log'],
+    keyArtifacts: ['build-log.txt', 'artifacts/.openshift_install.log'],
   },
   {
     name: 'upi-install-libvirt-heterogeneous',
@@ -427,7 +427,7 @@ const HETERO_VPN_LEAF_STEPS: GuideStep[] = [
     summary: 'Run openshift-tests against the heterogeneous cluster.',
     whenFails: 'Separate arch-specific worker failures from control-plane failures.',
     stepsCi: stepCi('ref', 'openshift-e2e-libvirt-test'),
-    keyArtifacts: ['build-log.txt', 'junit*.xml', 'e2e.log'],
+    keyArtifacts: ['build-log.txt', 'artifacts/junit/', 'artifacts/e2e.log'],
   },
   {
     name: 'ipi-conf-debug-kdump-gather-logs',
@@ -445,7 +445,7 @@ const HETERO_VPN_LEAF_STEPS: GuideStep[] = [
     bestEffort: true,
     via: 'gather',
     stepsCi: stepCi('ref', 'gather-must-gather'),
-    keyArtifacts: ['must-gather.tar'],
+    keyArtifacts: ['artifacts/must-gather.tar.gz'],
   },
   {
     name: 'gather-extra',
@@ -511,7 +511,7 @@ const UPI_HETERO_LEAF_STEPS: GuideStep[] = [
     summary: 'Install the s390x base cluster via remote libvirt tunnel.',
     via: 'upi-libvirt-install',
     stepsCi: stepCi('ref', 'upi-libvirt-install-install'),
-    keyArtifacts: ['build-log.txt', '.openshift_install.log'],
+    keyArtifacts: ['build-log.txt', 'artifacts/.openshift_install.log'],
   },
   {
     name: 'upi-libvirt-install-heterogeneous',
@@ -534,7 +534,7 @@ const UPI_HETERO_LEAF_STEPS: GuideStep[] = [
     ocpStage: 'Conformance',
     summary: 'Run openshift-tests on the heterogeneous cluster.',
     stepsCi: stepCi('ref', 'openshift-e2e-libvirt-test'),
-    keyArtifacts: ['build-log.txt', 'junit*.xml', 'e2e.log'],
+    keyArtifacts: ['build-log.txt', 'artifacts/junit/', 'artifacts/e2e.log'],
   },
   {
     name: 'gather-must-gather',
@@ -951,7 +951,7 @@ export const DEBUG_PLAYBOOK: DebugPlaybookItem[] = [
   {
     title: 'Read the step log that owns the failure',
     detail:
-      'For install: .openshift_install.log. For network/cleanup: build-log.txt. For tests: junit + e2e.log — not only the root ci-operator log.',
+      'For install: artifacts/.openshift_install.log. For network/cleanup: build-log.txt. For tests: artifacts/junit + artifacts/e2e.log — not only the root ci-operator log.',
   },
   {
     title: 'Capture lease, profile, and qemu host',

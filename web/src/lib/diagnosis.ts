@@ -89,10 +89,10 @@ export function buildDiagnosis(input: {
     primary: true,
     desc: 'Step execution log',
   });
-  if (ref.includes('upi-install-libvirt')) {
+  if (ref === 'upi-install-libvirt') {
     d.evidence.push({
-      label: `${ref}/.openshift_install.log`,
-      url: `${input.artBase}/${ref}/.openshift_install.log`,
+      label: `${ref}/artifacts/.openshift_install.log`,
+      url: `${input.artBase}/${ref}/artifacts/.openshift_install.log`,
       kind: 'log',
       primary: true,
       desc: 'Full openshift-install log',
@@ -105,6 +105,13 @@ export function buildDiagnosis(input: {
       kind: 'dir',
       primary: true,
       desc: 'JUnit XML test results',
+    });
+    d.evidence.push({
+      label: `${ref}/artifacts/e2e.log`,
+      url: `${input.artBase}/${ref}/artifacts/e2e.log`,
+      kind: 'log',
+      primary: false,
+      desc: 'openshift-tests e2e log',
     });
   }
   for (const g of ['gather-extra', 'gather-must-gather', 'gather-audit-logs']) {
@@ -120,8 +127,8 @@ export function buildDiagnosis(input: {
   }
   if (input.steps['gather-must-gather']) {
     d.evidence.push({
-      label: 'gather-must-gather/must-gather.tar.gz',
-      url: `${input.artBase}/gather-must-gather/must-gather.tar.gz`,
+      label: 'gather-must-gather/artifacts/must-gather.tar.gz',
+      url: `${input.artBase}/gather-must-gather/artifacts/must-gather.tar.gz`,
       kind: 'archive',
       primary: false,
       desc: 'Must-gather archive (if produced)',

@@ -98,13 +98,13 @@ export const STEP_INFO: Record<string, StepInfo> = {
   'upi-install-libvirt': {
     desc: '⚑ KEY STEP: Creates VMs on LPAR, runs openshift-install, waits for bootstrap-complete + install-complete.',
     hints: [
-      { t:'<strong>Most critical log: <code>upi-install-libvirt/.openshift_install.log</code></strong> — full openshift-install output with bootstrap events and cert issuance.', cls:'warn' },
+      { t:'<strong>Most critical log: <code>upi-install-libvirt/artifacts/.openshift_install.log</code></strong> — full openshift-install output with bootstrap events and cert issuance.', cls:'warn' },
       { t:'<strong>Stale volume error</strong> ("exists already") → pre-cleanup did not destroy prior VMs. Will recur until manual virsh cleanup.', cls:'warn' },
       { t:'s390x fallback: if virt-install not available → <code>virsh define</code> + <code>virsh start</code> + <code>virsh vol-resize</code>.', cls:'info' },
       { t:'Bootstrap timeout = 30 min. Install timeout = 60 min. VOLUME_CAPACITY=120G. DOMAIN_MEMORY=24567 MiB.', cls:'info' },
       { t:'After success: kubeconfig → <code>$SHARED_DIR/kubeconfig</code>, password → <code>$SHARED_DIR/kubeadmin-password</code>.', cls:'info' },
     ],
-    keyFiles: ['upi-install-libvirt/build-log.txt','upi-install-libvirt/.openshift_install.log'],
+    keyFiles: ['upi-install-libvirt/build-log.txt','upi-install-libvirt/artifacts/.openshift_install.log'],
   },
   'upi-install-libvirt-heterogeneous': {
     desc: '⚑ KEY STEP: Same as upi-install-libvirt for heterogeneous (z-za) jobs.',
@@ -112,7 +112,7 @@ export const STEP_INFO: Record<string, StepInfo> = {
       { t:'<strong>Stale volume</strong> "exists already" → prior cleanup-post failed. See pre-cleanup log.', cls:'warn' },
       { t:'Cluster name truncation warning (>21 chars) is cosmetic — not a failure cause.', cls:'info' },
     ],
-    keyFiles: ['upi-install-libvirt-heterogeneous/build-log.txt','upi-install-libvirt-heterogeneous/.openshift_install.log'],
+    keyFiles: ['upi-install-libvirt-heterogeneous/build-log.txt'],
   },
   'openshift-e2e-libvirt-conf': {
     desc: 'Validates cluster health, sets TEST_PROVIDER, configures kubeconfig before tests.',

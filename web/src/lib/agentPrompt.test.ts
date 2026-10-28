@@ -80,8 +80,8 @@ function sample(partial?: Partial<DebugAnalysis>): DebugAnalysis {
           'https://storage.googleapis.com/test-platform-results-public/logs/job/1/artifacts/e2e/upi-install-libvirt',
         keyArtifacts: [
           {
-            label: '.openshift_install.log',
-            url: 'https://storage.googleapis.com/test-platform-results-public/logs/job/1/artifacts/e2e/upi-install-libvirt/.openshift_install.log',
+            label: 'artifacts/.openshift_install.log',
+            url: 'https://storage.googleapis.com/test-platform-results-public/logs/job/1/artifacts/e2e/upi-install-libvirt/artifacts/.openshift_install.log',
           },
         ],
       },

@@ -78,8 +78,12 @@ async function fetchAllSteps(
 ): Promise<Record<string, StepResult>> {
   const prefix = `${gcsPath}/artifacts/${testSubdir ? `${testSubdir}/` : ''}`;
   const dirData = await listPrefix(bucket, prefix, { delimiter: '/', maxResults: 100 });
+  // Never treat build-resources / release / job_labels as multi-stage steps
+  // (early-fail jobs often only have those under artifacts/).
   const existing = new Set(
-    (dirData?.prefixes || []).map((p) => p.replace(/\/$/, '').split('/').pop()!).filter(Boolean),
+    (dirData?.prefixes || [])
+      .map((p) => p.replace(/\/$/, '').split('/').pop()!)
+      .filter((n) => n && !NON_TEST_ARTIFACT_DIRS.has(n)),
   );
 
   const configured = [
@@ -157,21 +161,30 @@ async function fetchAllSteps(
   return results;
 }
 
-function keyArtifactsFor(step: string, stepBase: string): { label: string; url: string }[] {
+/** Key GCS artifact links for a step — paths match what ci-operator actually uploads. */
+export function keyArtifactsFor(
+  step: string,
+  stepBase: string,
+): { label: string; url: string }[] {
   const out: { label: string; url: string }[] = [
     { label: 'build-log.txt', url: `${stepBase}/build-log.txt` },
   ];
-  if (step.includes('upi-install-libvirt') && !step.includes('network')) {
-    out.push({ label: '.openshift_install.log', url: `${stepBase}/.openshift_install.log` });
+  // Primary UPI install only (hetero worker-add step usually has no installer log).
+  // File lives under the step's artifacts/ dir, not the step root.
+  if (step === 'upi-install-libvirt') {
+    out.push({
+      label: 'artifacts/.openshift_install.log',
+      url: `${stepBase}/artifacts/.openshift_install.log`,
+    });
   }
   if (step === 'openshift-e2e-libvirt-test') {
     out.push({ label: 'artifacts/junit/', url: `${stepBase}/artifacts/junit/` });
-    out.push({ label: 'e2e.log', url: `${stepBase}/e2e.log` });
+    out.push({ label: 'artifacts/e2e.log', url: `${stepBase}/artifacts/e2e.log` });
   }
   if (step === 'gather-must-gather') {
     out.push({
-      label: 'must-gather.tar.gz',
-      url: `${stepBase}/must-gather.tar.gz`,
+      label: 'artifacts/must-gather.tar.gz',
+      url: `${stepBase}/artifacts/must-gather.tar.gz`,
     });
   }
   return out;
