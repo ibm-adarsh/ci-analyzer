@@ -272,7 +272,6 @@ function selectLabel(w: GuideWorkflow): string {
     upi: 'UPI · classical / external',
     'hetero-vpn': 'Hetero VPN · z-xz (5.0) / z-za',
     hetero: 'Hetero UPI · classical z-xz',
-    ibmcloud: 'IBM Cloud multi-arch',
   };
   return short[w.id] || w.title;
 }
@@ -303,11 +302,6 @@ function whenToUse(wf: GuideWorkflow): string[] {
       return [
         'External IBM Z UPI jobs and non-VPN / classic libvirt UPI',
         'Same leaf shape as VPN for most PRE/TEST/POST steps',
-      ];
-    case 'ibmcloud':
-      return [
-        'IBM Cloud multi-arch periodics — not LPAR libvirt',
-        'Use Prow artifacts + ibmcloud workflow docs',
       ];
     default:
       return [wf.summary];

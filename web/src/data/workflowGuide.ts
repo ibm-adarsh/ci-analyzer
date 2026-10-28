@@ -635,27 +635,6 @@ export const GUIDE_WORKFLOWS: GuideWorkflow[] = [
     releaseYaml: `${RELEASE}/ci-operator/step-registry/openshift/e2e/libvirt/upi/heterogeneous/openshift-e2e-libvirt-upi-heterogeneous-workflow.yaml`,
     steps: UPI_HETERO_LEAF_STEPS,
   },
-  {
-    id: 'ibmcloud',
-    name: 'openshift-e2e-ibmcloud-heterogeneous',
-    title: 'IBM Cloud multi-arch (s390x)',
-    summary:
-      'Not libvirt-on-LPAR: IBM Cloud bare-metal / VPC multi-arch jobs (profile ibmcloud-multi-s390x). Listed for completeness.',
-    since: '4.14+',
-    profiles: ['ibmcloud-multi-s390x'],
-    stepsCi: stepCi('workflow', 'openshift-e2e-ibmcloud-heterogeneous'),
-    releaseYaml: `${RELEASE}/ci-operator/step-registry/openshift/e2e/ibmcloud/heterogeneous/openshift-e2e-ibmcloud-heterogeneous-workflow.yaml`,
-    steps: [
-      {
-        name: '(ibmcloud workflow steps)',
-        phase: 'pre',
-        ocpStage: 'Cloud provision (not libvirt VPN)',
-        summary: 'Provision via IBM Cloud steps — different artifact tree than libvirt-vpn.',
-        detail:
-          'Use this debugger’s libvirt views for libvirt-* profiles. For ibmcloud jobs, start from Prow artifacts and the ibmcloud workflow on steps.ci.',
-      },
-    ],
-  },
 ];
 
 export const CLUSTER_PROFILES: ClusterProfileInfo[] = [
@@ -1032,7 +1011,6 @@ export function workflowByJobHints(jobName: string, workflow?: string | null): G
     return workflowByName('hetero-vpn');
   }
   if (/z-xz|heterogeneous/i.test(jobName)) return workflowByName('hetero');
-  if (/ibmcloud/i.test(jobName)) return workflowByName('ibmcloud');
   if (/external-ibmz-upi|libvirt-upi/i.test(jobName) && !/vpn/i.test(jobName)) {
     return workflowByName('upi');
   }
