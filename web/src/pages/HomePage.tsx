@@ -80,18 +80,19 @@ export function HomePage() {
       <section className="home-hero">
         <p className="home-kicker">IBM Z · OpenShift CI</p>
         <h1>
-          <span className="home-hero-line">Paste a Prow link.</span>
+          <span className="home-hero-line">Paste a Prow CI Job link.</span>
           <span className="home-hero-line home-hero-accent">Get the debug path.</span>
         </h1>
         <p className="home-lead">
           <span className="home-lead-line">
-            Workflow status, phase timing, logs, and release context for libvirt s390x jobs —
+            Failed tests, PRE → TEST → POST timing, logs, and release context for IBM Z
+            libvirt jobs —
           </span>
-          <span className="home-lead-line">without digging GCS by hand.</span>
+          <span className="home-lead-line">without hunting through GCS by hand.</span>
         </p>
 
         <div className="home-paste">
-          <label htmlFor="prow-url">Prow job URL</label>
+          <label htmlFor="prow-url">Prow CI Job URL</label>
           <div className="home-paste-row">
             <input
               id="prow-url"
