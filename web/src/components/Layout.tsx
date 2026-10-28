@@ -36,13 +36,25 @@ export function Layout({ children }: { children: ReactNode }) {
     <div className={frameClass}>
       <header className="topbar">
         <div className="app-rail topbar-inner">
-          <Link to="/" className="brand">
+          <Link to="/" className="brand" aria-label="IBM Z CI Job Debugger home">
             <span className="brand-mark" aria-hidden>
-              Z
+              <img
+                className="brand-logo"
+                src="/brand-analytics.png"
+                alt=""
+                width={36}
+                height={36}
+                decoding="async"
+              />
             </span>
             <span className="brand-text">
-              <span className="brand-name">IBM Z</span>
-              <span className="brand-sep">Job Debugger</span>
+              <span className="brand-name">
+                IBM <span className="brand-z">Z</span>
+              </span>
+              <span className="brand-sep">
+                <span className="brand-sep-rule" aria-hidden />
+                CI Job Debugger
+              </span>
             </span>
           </Link>
           <nav className="topbar-nav" aria-label="Primary">
