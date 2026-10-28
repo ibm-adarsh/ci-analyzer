@@ -378,6 +378,70 @@ select {
   border-color: var(--border2);
 }
 
+.header-watch {
+  display: none;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 1px;
+  margin-left: 6px;
+  padding: 7px 12px 6px;
+  min-width: 148px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 14%, var(--surface)) 0%,
+    color-mix(in srgb, var(--accent) 6%, var(--surface2)) 55%,
+    color-mix(in srgb, #8b7cff 8%, var(--surface)) 100%
+  );
+  line-height: 1.15;
+  text-align: right;
+  user-select: none;
+}
+@media (min-width: 920px) {
+  .header-watch {
+    display: flex;
+  }
+}
+.header-watch-greeting {
+  font-size: 0.72rem;
+  font-weight: 750;
+  color: var(--accent);
+  letter-spacing: 0.01em;
+}
+.header-watch-time {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.header-watch-clock {
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.header-watch-tz {
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, #8b7cff 70%, var(--accent));
+}
+.header-watch-date {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+[data-theme='light'] .header-watch {
+  background: linear-gradient(135deg, #e8f1ff 0%, #f3eefc 55%, #f7f0ff 100%);
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+[data-theme='light'] .header-watch-tz {
+  color: #6b4fd8;
+}
+
 /* ── Home landing ── */
 .home {
   padding-top: 12px;

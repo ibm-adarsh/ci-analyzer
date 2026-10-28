@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useState, type ReactNode } from 'react';
 import { BrandMark } from './BrandMark';
+import { HeaderWatch } from './HeaderWatch';
 import { TopbarSignal } from './TopbarSignal';
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -68,6 +69,7 @@ export function Layout({ children }: { children: ReactNode }) {
             >
               {theme === 'dark' ? 'Light' : 'Dark'}
             </button>
+            <HeaderWatch />
           </nav>
         </div>
       </header>
