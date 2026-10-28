@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { DebugAnalysis } from './analyze';
-import { buildAgentPrompt } from './agentPrompt';
+import {
+  buildAgentPrompt,
+  buildGoogleAskBrief,
+  GOOGLE_ASK_MAX_CHARS,
+  googleAiStudioAskUrl,
+} from './agentPrompt';
 
 function sample(partial?: Partial<DebugAnalysis>): DebugAnalysis {
   const base: DebugAnalysis = {
@@ -177,5 +182,18 @@ describe('buildAgentPrompt', () => {
     expect(prompt).not.toContain('**');
     expect(prompt).toContain('What I need from you');
     expect(prompt).toContain('qemu+tcp://lnxocp01/system');
+  });
+});
+
+describe('buildGoogleAskBrief', () => {
+  it('stays compact and encodes into an AI Studio URL', () => {
+    const brief = buildGoogleAskBrief(sample());
+    expect(brief.length).toBeLessThanOrEqual(GOOGLE_ASK_MAX_CHARS);
+    expect(brief).toContain('Concise root-cause');
+    expect(brief).toContain('upi-install-libvirt');
+    expect(brief).toContain('prow.ci.openshift.org');
+    const url = googleAiStudioAskUrl(brief);
+    expect(url.startsWith('https://aistudio.google.com/prompts/new_chat?prompt=')).toBe(true);
+    expect(url).toContain(encodeURIComponent('upi-install-libvirt'));
   });
 });

@@ -906,6 +906,28 @@ select {
   justify-content: space-between;
   margin: 12px 0;
 }
+.prompt-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.prompt-ask-note {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: var(--accent-dim);
+  color: var(--text2);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+.prompt-ask-hint {
+  margin: 0 0 12px;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  max-width: 52rem;
+}
 .seg {
   display: inline-flex;
   border: 1px solid var(--border);

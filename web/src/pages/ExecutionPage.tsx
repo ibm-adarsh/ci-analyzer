@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { analyzeExecution, type DebugAnalysis, type WorkflowStepView } from '../lib/analyze';
-import { buildAgentPrompt } from '../lib/agentPrompt';
+import {
+  buildAgentPrompt,
+  buildGoogleAskBrief,
+  googleAiStudioAskUrl,
+} from '../lib/agentPrompt';
 import {
   compareToLastGreen,
   type GreenCompareResult,
@@ -995,8 +999,10 @@ function JobDetailsPanel({
 
 function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
   const [copied, setCopied] = useState(false);
+  const [askNote, setAskNote] = useState<string | null>(null);
   const passed = a.result === 'PASSED';
   const prompt = useMemo(() => (passed ? '' : buildAgentPrompt(a)), [a, passed]);
+  const googleBrief = useMemo(() => (passed ? '' : buildGoogleAskBrief(a)), [a, passed]);
 
   if (passed) {
     const short = shortJob(a.jobName);
@@ -1024,21 +1030,42 @@ function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
     );
   }
 
-  async function copy() {
+  async function writeClipboard(text: string): Promise<boolean> {
     try {
-      await navigator.clipboard.writeText(prompt);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      await navigator.clipboard.writeText(text);
+      return true;
     } catch {
-      const ta = document.createElement('textarea');
-      ta.value = prompt;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        return true;
+      } catch {
+        return false;
+      }
     }
+  }
+
+  async function copy() {
+    const ok = await writeClipboard(prompt);
+    if (!ok) return;
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function askGoogleAi() {
+    const ok = await writeClipboard(prompt);
+    const url = googleAiStudioAskUrl(googleBrief);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setAskNote(
+      ok
+        ? 'Opened Google AI Studio with a compact brief. Full prompt is on the clipboard — paste (⌘V / Ctrl+V) if you want log tails too. Free Google sign-in; no API key stored here.'
+        : 'Opened Google AI Studio with a compact brief. Clipboard copy failed — use Copy prompt if you need the full log tails.',
+    );
+    window.setTimeout(() => setAskNote(null), 10000);
   }
 
   return (
@@ -1049,15 +1076,27 @@ function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
         phase timings, and the last 80 lines of each failed step log.
       </p>
       <div className="prompt-toolbar">
-        <button type="button" className="btn btn-primary" onClick={() => void copy()}>
-          {copied ? 'Copied ✓' : 'Copy prompt'}
-        </button>
+        <div className="prompt-toolbar-actions">
+          <button type="button" className="btn btn-primary" onClick={() => void askGoogleAi()}>
+            Ask Google AI
+          </button>
+          <button type="button" className="btn" onClick={() => void copy()}>
+            {copied ? 'Copied ✓' : 'Copy prompt'}
+          </button>
+        </div>
       </div>
+      {askNote && <p className="prompt-ask-note">{askNote}</p>}
+      <p className="muted prompt-ask-hint">
+        Ask Google AI opens the free Google AI Studio chat (sign-in, no API key in this app) with a
+        condensed failure brief prefilled. There is no official no-key Gemini HTTP API — scraping
+        or anonymous “public edge” proxies are unsafe and unsupported.
+      </p>
       <pre className="prompt-box" tabIndex={0}>
         {prompt}
       </pre>
       <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-        ~{prompt.length.toLocaleString()} characters.
+        ~{prompt.length.toLocaleString()} characters
+        {googleBrief ? ` · Google brief ~${googleBrief.length.toLocaleString()} chars` : ''}.
       </p>
     </section>
   );

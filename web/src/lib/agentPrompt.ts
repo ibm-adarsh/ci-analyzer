@@ -16,6 +16,71 @@ function section(title: string): string {
   return `${title}\n${'-'.repeat(Math.min(title.length, 48))}`;
 }
 
+/** Soft cap so encodeURIComponent(url) stays under common browser URL limits. */
+export const GOOGLE_ASK_MAX_CHARS = 1800;
+
+/**
+ * Compact brief for Google AI Studio / AI Mode (no API key).
+ * Full log tails do not fit URL transport — pair with clipboard copy of buildAgentPrompt.
+ */
+export function buildGoogleAskBrief(a: DebugAnalysis): string {
+  const shortJob = a.jobName
+    .replace(/^periodic-ci-openshift-multiarch-main-nightly-/, '')
+    .replace(/^periodic-ci-openshift-multiarch-master-nightly-/, '');
+  const lines: string[] = [];
+  lines.push(
+    'Concise root-cause analysis for this IBM Z (s390x / libvirt VPN) OpenShift CI failure. Prefer evidence over speculation. Reply with: (1) primary failure vs secondary, (2) 2–4 next checks, (3) what is still missing.',
+  );
+  lines.push(`Prow: ${a.raw}`);
+  lines.push(`Job: ${shortJob}`);
+  lines.push(`Build: ${a.buildId} · result=${a.result}`);
+  if (a.meta.ocpVersion) {
+    lines.push(
+      `OCP ${a.meta.ocpVersion}${a.meta.fromVersion ? ` ← ${a.meta.fromVersion}` : ''}${a.meta.fips ? ' · FIPS' : ''}${a.meta.techPreview ? ' · TechPreview' : ''}`,
+    );
+  }
+  lines.push(`Profile: ${a.meta.profile} · workflow: ${a.meta.workflow || 'openshift-e2e-libvirt-vpn'}`);
+  if (a.leaseSlot) lines.push(`Lease: ${a.leaseSlot}`);
+  if (a.firstFailed) lines.push(`First failed step: ${a.firstFailed}`);
+  const failedSteps = a.workflow.filter((w) => w.status === 'failed').map((w) => w.name);
+  if (failedSteps.length) lines.push(`Failed steps: ${failedSteps.slice(0, 6).join(', ')}`);
+  if (a.testFailures?.failures?.length) {
+    const product = a.testFailures.failures.filter(
+      (f) =>
+        f.severity === 'blocking' ||
+        (f.severity !== 'informing' && f.suite !== 'monitor'),
+    );
+    const cases = (product.length ? product : a.testFailures.failures).slice(0, 8);
+    lines.push(
+      `Failed tests (${cases.length}${a.testFailures.failures.length > cases.length ? '+' : ''}):`,
+    );
+    for (const t of cases) {
+      const name = t.name.replace(/\s*\[Suite:[^\]]+\]/g, '').trim();
+      lines.push(`- ${name.slice(0, 120)}${t.severity === 'informing' ? ' (informing)' : ''}`);
+    }
+  }
+  for (const f of a.diagnosis.facts.slice(0, 6)) {
+    lines.push(`Fact: ${f}`);
+  }
+  const primary = a.workflow.find((w) => w.name === a.firstFailed);
+  if (primary?.stepBase) lines.push(`Primary build-log: ${primary.stepBase}/build-log.txt`);
+  lines.push(
+    'If you can fetch URLs, open the Prow/GCS links above. Fuller prompt with log tails is on the clipboard.',
+  );
+  return trimToMax(lines.join('\n'), GOOGLE_ASK_MAX_CHARS);
+}
+
+/** Google AI Studio free web UI — prefill via ?prompt= (Google sign-in, no API key). */
+export function googleAiStudioAskUrl(brief: string): string {
+  const flat = brief.replace(/\r\n/g, '\n').trim();
+  return `https://aistudio.google.com/prompts/new_chat?prompt=${encodeURIComponent(flat)}`;
+}
+
+function trimToMax(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, Math.max(0, max - 14)).trimEnd()}\n…[truncated]`;
+}
+
 /** Build a clean copy-paste brief for IBM BOB / any AI agent (plain text, no markdown). */
 export function buildAgentPrompt(a: DebugAnalysis): string {
   const failed = a.workflow.filter((w) => w.status === 'failed');
