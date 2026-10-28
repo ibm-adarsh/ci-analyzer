@@ -1,5 +1,14 @@
 import { BEST_EFFORT_STEPS } from '../data/workflow';
-import { HETERO_ALIASES, VPN_WORKFLOW_STEPS, workflowForJob } from '../data/vpnWorkflow';
+import { LEASE_BY_SLOT } from '../data/lpar';
+import {
+  HETERO_ALIASES,
+  HETERO_VPN_WORKFLOW_STEPS,
+  UPI_HETERO_WORKFLOW_STEPS,
+  VPN_WORKFLOW_STEPS,
+  inferWorkflowName,
+  stepsForWorkflow,
+  workflowForJob,
+} from '../data/vpnWorkflow';
 import type { Analysis, JobResult, ParsedUrl, StepResult, StepStatus } from '../types';
 import { buildDiagnosis } from './diagnosis';
 import { fetchJson, fetchText, listPrefix } from './gcs';
@@ -73,7 +82,15 @@ async function fetchAllSteps(
     (dirData?.prefixes || []).map((p) => p.replace(/\/$/, '').split('/').pop()!).filter(Boolean),
   );
 
-  const configured = VPN_WORKFLOW_STEPS.map((s) => s.name);
+  const configured = [
+    ...new Set(
+      [
+        ...VPN_WORKFLOW_STEPS,
+        ...HETERO_VPN_WORKFLOW_STEPS,
+        ...UPI_HETERO_WORKFLOW_STEPS,
+      ].map((s) => s.name),
+    ),
+  ];
   const toFetch = [
     ...configured.filter((s) => existing.has(s)),
     ...[...existing].filter((s) => !configured.includes(s)),
@@ -174,8 +191,11 @@ function buildWorkflowView(
   profile: string | null | undefined,
   steps: Record<string, StepResult>,
   jobRunning: boolean,
+  workflowName?: string | null,
 ): { workflow: WorkflowStepView[]; currentStep: string | null } {
-  const defs = workflowForJob(jobName, profile);
+  const defs = workflowName
+    ? stepsForWorkflow(workflowName)
+    : workflowForJob(jobName, profile);
   // Map hetero observed names onto workflow
   const byName: Record<string, StepResult> = { ...steps };
   for (const [hetero, canon] of Object.entries(HETERO_ALIASES)) {
@@ -358,11 +378,38 @@ export async function analyzeExecution(
   }
   const lease = extractLeaseInfo(prowLog, steps);
   const leaseSlot = lease?.slot || null;
+  const leaseRec = leaseSlot ? LEASE_BY_SLOT[leaseSlot] : undefined;
 
   onProgress?.(85, 'Building debug view…');
   const meta = parseJobMeta(jobName);
-  enrichMetaFromProwLog(meta, prowLog);
+  enrichMetaFromProwLog(meta, prowLog, jobName);
   enrichMetaFromProwjob(meta, prowjob);
+  // Lease catalog fills profile/pool when prowjob labels are missing (e.g. OZ / hetero).
+  if (leaseRec?.profile && !meta.profile) meta.profile = leaseRec.profile;
+  if (leaseRec?.profile && /vpn-amd64|vpn-arm64|vpn-oz|amd64/.test(leaseRec.profile)) {
+    // Prefer authoritative lease profile for hetero / OZ carve-outs.
+    if (
+      !meta.profile ||
+      meta.profile === 'libvirt-s390x-vpn' ||
+      meta.profile.endsWith('-vpn')
+    ) {
+      if (
+        leaseRec.profile !== meta.profile &&
+        (leaseRec.workerArch || leaseRec.profile.includes('oz'))
+      ) {
+        meta.profile = leaseRec.profile;
+        meta.workflow = inferWorkflowName(jobName, meta.profile);
+      }
+    }
+  }
+  if (leaseRec?.workerArch && !meta.workerArch) {
+    meta.workerArch = leaseRec.workerArch;
+    meta.topologyKind = 'heterogeneous';
+    meta.topologyShort =
+      leaseRec.workerArch === 'arm64'
+        ? 'Heterogeneous (z-za)'
+        : 'Heterogeneous (z-xz)';
+  }
 
   const prowjobState = (prowjob?.status as { state?: string } | undefined)?.state;
   const result: JobResult =
@@ -386,11 +433,12 @@ export async function analyzeExecution(
     counts[s] = (counts[s] || 0) + 1;
   }
 
-  const configuredNames = VPN_WORKFLOW_STEPS.map((s) => s.name);
+  const configuredDefs = stepsForWorkflow(meta.workflow);
+  const configuredNames = configuredDefs.map((s) => s.name);
   // Prefer first failed in workflow order; use observed GCS dir names (hetero aliases).
   const failedInOrder = configuredNames
     .map((canon) => {
-      const dir = observedDirFor(canon, steps);
+      const dir = observedDirFor(canon, steps) || (steps[canon] ? canon : null);
       if (!dir || steps[dir]?.status !== 'failed') return null;
       return dir;
     })
@@ -417,6 +465,7 @@ export async function analyzeExecution(
     meta.profile,
     steps,
     result === 'RUNNING',
+    meta.workflow,
   );
 
   for (const ph of ['pre', 'test', 'post'] as const) {
@@ -461,30 +510,35 @@ export async function analyzeExecution(
       expectedSuite: meta.testType,
     });
     if (testFailures?.failures.length) {
-      const blocking = testFailures.failures.filter((f) => f.severity === 'blocking').length;
-      const suites = testFailures.bySuite.map((g) => `${g.count} ${g.label}`).join(', ');
-      diagnosis.facts.push(
-        blocking
-          ? `Failed tests: ${blocking} blocking` +
-              (testFailures.summary.informingFail
-                ? `, ${testFailures.summary.informingFail} informing`
-                : '') +
-              ` (${suites})`
-          : `Failed tests: ${testFailures.failures.length} across ${testFailures.bySuite.length} suite(s) (${suites})`,
+      const product = testFailures.failures.filter(
+        (f) =>
+          f.severity === 'blocking' ||
+          (f.severity !== 'informing' && f.suite !== 'monitor'),
       );
-      for (const g of testFailures.bySuite.slice(0, 4)) {
+      const productOrAll = product.length ? product : testFailures.failures;
+      const bySuite = testFailures.bySuite.filter((g) => g.suite !== 'monitor');
+      const suites = bySuite.map((g) => `${g.count} ${g.label}`).join(', ');
+      diagnosis.facts.push(
+        `Failed test cases: ${productOrAll.length}${suites ? ` (${suites})` : ''}`,
+      );
+      for (const g of bySuite.slice(0, 4)) {
+        const cases = g.tests.filter(
+          (t) => t.severity === 'blocking' || t.severity !== 'informing',
+        );
+        if (!cases.length) continue;
         diagnosis.hypotheses.push({
           tag: g.suite,
-          text: `${g.label}: ${g.tests
+          text: `${g.label}: ${cases
             .slice(0, 3)
             .map((t) => t.name.replace(/\s*\[Suite:[^\]]+\]/g, '').trim())
-            .join(' · ')}${g.tests.length > 3 ? ` (+${g.tests.length - 3} more)` : ''}`,
+            .join(' · ')}${cases.length > 3 ? ` (+${cases.length - 3} more)` : ''}`,
         });
       }
-      if (testFailures.junitFiles[0]) {
+      const junit = testFailures.junitFiles.find((f) => !/monitor/i.test(f.name));
+      if (junit) {
         diagnosis.evidence.push({
-          label: testFailures.junitFiles[0].name,
-          url: testFailures.junitFiles[0].url,
+          label: junit.name,
+          url: junit.url,
           kind: 'junit',
           primary: true,
           desc: 'JUnit XML with failed test cases',
@@ -504,17 +558,18 @@ export async function analyzeExecution(
       progressSummary = 'Job is running but the current step could not be inferred.';
     }
   } else if (result === 'FAILED' && firstFailed) {
-    if (testFailures?.failures.length) {
-      const blocking = testFailures.failures.filter((f) => f.severity === 'blocking');
-      const n = blocking.length || testFailures.failures.length;
-      const topSuite =
-        blocking[0]?.suite ||
-        testFailures.bySuite.find((g) => g.suite !== 'monitor')?.suite ||
-        testFailures.bySuite[0]?.suite;
+    const productFails =
+      testFailures?.failures.filter(
+        (f) =>
+          f.severity === 'blocking' ||
+          (f.severity !== 'informing' && f.suite !== 'monitor'),
+      ) || [];
+    if (productFails.length) {
+      const topSuite = productFails[0]?.suite;
       const topLabel = topSuite
-        ? testFailures.bySuite.find((g) => g.suite === topSuite)?.label
+        ? testFailures?.bySuite.find((g) => g.suite === topSuite)?.label
         : null;
-      progressSummary = `Failed at ${firstFailed} — ${n} failing test case(s)${
+      progressSummary = `Failed at ${firstFailed} — ${productFails.length} failed test case(s)${
         topLabel ? ` (${topLabel})` : ''
       }.`;
     } else {

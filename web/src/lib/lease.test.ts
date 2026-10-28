@@ -117,6 +117,18 @@ Imported release 4.14.0-0.nightly-2026-09-30-024514 created at 2026-09-30 02:46:
     expect(lpar?.lpar).toBe('lnxocp04');
   });
 
+  it('resolves OZ and heterogeneous leases from catalog', () => {
+    expect(resolveLpar('libvirt-s390x-oz-1-2')?.lpar).toBe('lnxocp12');
+    expect(resolveLpar('libvirt-s390x-oz-3-0')?.lpar).toBe('lnxocp14');
+    const amd = resolveLpar('libvirt-s390x-vpn-amd64-0-0');
+    expect(amd?.lpar).toBe('lnxocp11');
+    expect(amd?.hostnameAdditional).toContain('xkvmocp08');
+    expect(amd?.vxlanBridge).toBe('ocp1-amd');
+    const arm = resolveLpar('libvirt-s390x-arm64-0-0');
+    expect(arm?.hostnameAdditional).toContain('akvmocp03');
+    expect(arm?.vxlanBridge).toBe('ocp2-arm');
+  });
+
   it('falls back to LEASED_RESOURCE in step logs', () => {
     const steps = {
       'upi-libvirt-cleanup-pre': {

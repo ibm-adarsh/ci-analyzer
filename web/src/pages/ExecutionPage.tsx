@@ -9,12 +9,21 @@ import {
 import { fmtDur } from '../lib/gcs';
 import { releaseBrowserLinks } from '../lib/release';
 import { parseExecutionRoute } from '../lib/url';
-import { HETERO_ALIASES, WORKFLOW_SOURCE } from '../data/vpnWorkflow';
-import { RELEASE_REPO, STEPS_CI } from '../data/workflow';
+import {
+  HETERO_ALIASES,
+  HETERO_VPN_WORKFLOW_STEPS,
+  UPI_HETERO_WORKFLOW_STEPS,
+  VPN_WORKFLOW_STEPS,
+  WORKFLOW_DOCS,
+  WORKFLOW_SOURCE,
+  type WorkflowPhase,
+} from '../data/vpnWorkflow';
+import { STEPS_CI } from '../data/workflow';
 import { StatusBadge } from '../components/StatusBadge';
 import { WorkflowGuideView } from '../components/WorkflowGuideView';
 import { resolveLpar } from '../lib/lparResolve';
-import type { TestFailureReport } from '../lib/junit';
+import { buildJobFacets } from '../lib/jobFacets';
+import type { FailedTestCase, TestFailureReport } from '../lib/junit';
 
 /** Map observed GCS / hetero step name onto the workflow leaf used for UI ids. */
 function workflowStepKey(name: string | null | undefined): string | null {
@@ -22,21 +31,61 @@ function workflowStepKey(name: string | null | undefined): string | null {
   return HETERO_ALIASES[name] || name;
 }
 
-const WORKFLOW_YAML: Record<string, string> = {
-  'openshift-e2e-libvirt-vpn':
-    `${RELEASE_REPO}/blob/main/ci-operator/step-registry/openshift/e2e/libvirt/vpn/openshift-e2e-libvirt-vpn-workflow.yaml`,
-  'openshift-e2e-libvirt-vpn-fips':
-    `${RELEASE_REPO}/blob/main/ci-operator/step-registry/openshift/e2e/libvirt/vpn/fips/openshift-e2e-libvirt-vpn-fips-workflow.yaml`,
-  'openshift-e2e-libvirt-upi-heterogeneous':
-    `${RELEASE_REPO}/blob/main/ci-operator/step-registry/openshift/e2e/libvirt/upi/heterogeneous/openshift-e2e-libvirt-upi-heterogeneous-workflow.yaml`,
+const PHASE_BLURB: Record<
+  WorkflowPhase,
+  { title: string; blurb: string }
+> = {
+  pre: {
+    title: 'PRE phase failed',
+    blurb:
+      'Failure happened before tests — usually lease cleanup, cluster config, or OCP installation.',
+  },
+  test: {
+    title: 'TEST phase failed',
+    blurb: 'The cluster came up, but one or more product test cases failed.',
+  },
+  post: {
+    title: 'POST phase failed',
+    blurb: 'Failure during gather / must-gather / cleanup after the test run.',
+  },
 };
+
+function phaseForStepName(name: string | null | undefined): WorkflowPhase | null {
+  if (!name) return null;
+  const canon = HETERO_ALIASES[name] || name;
+  const all = [
+    ...VPN_WORKFLOW_STEPS,
+    ...HETERO_VPN_WORKFLOW_STEPS,
+    ...UPI_HETERO_WORKFLOW_STEPS,
+  ];
+  const def = all.find((s) => s.name === canon || s.name === name);
+  if (def) return def.phase;
+  if (/gather|cleanup-post|deprovision|kdump-gather/i.test(name)) return 'post';
+  if (/test|e2e/i.test(name)) return 'test';
+  if (/install|conf|cleanup-pre|fips|deprovision/i.test(name)) return 'pre';
+  return null;
+}
+
+/** Product failures only — drop monitor / informing noise. */
+function productFailedTests(report: TestFailureReport): FailedTestCase[] {
+  const blocking = report.failures.filter((f) => f.severity === 'blocking');
+  if (blocking.length) return blocking;
+  return report.failures.filter(
+    (f) => f.suite !== 'monitor' && f.severity !== 'informing',
+  );
+}
+
+function cleanTestName(name: string): string {
+  return name.replace(/\s*\[Suite:[^\]]+\]/g, '').trim();
+}
 
 function workflowDocs(name: string | null) {
   const n = name || WORKFLOW_SOURCE.name;
+  const docs = WORKFLOW_DOCS[n];
   return {
     name: n,
-    stepsCi: `${STEPS_CI}/workflow/${n}`,
-    yaml: WORKFLOW_YAML[n] || WORKFLOW_SOURCE.yaml,
+    stepsCi: docs?.stepsCi || `${STEPS_CI}/workflow/${n}`,
+    yaml: docs?.yaml || WORKFLOW_SOURCE.yaml,
   };
 }
 
@@ -192,17 +241,7 @@ export function ExecutionPage() {
       .finally(() => setCompareBusy(false));
   };
 
-  const chips: { label: string; value: string }[] = [
-    { label: 'OCP', value: a.meta.ocpVersion || '—' },
-    { label: 'Profile', value: a.meta.profile || '—' },
-    { label: 'Topology', value: a.meta.topology || '—' },
-    {
-      label: 'Test',
-      value: [a.meta.testType, a.meta.fips ? 'FIPS' : null, a.meta.techPreview ? 'TechPreview' : null]
-        .filter(Boolean)
-        .join(' · '),
-    },
-  ];
+  const facets = buildJobFacets(a.meta);
 
   return (
     <div className="dbg">
@@ -219,14 +258,39 @@ export function ExecutionPage() {
           </div>
           <h1 title={a.jobName}>{shortJob(a.jobName)}</h1>
           <p className="dbg-summary">{a.progressSummary}</p>
-          <div className="dbg-chips">
-            {chips.map((c) => (
-              <div key={c.label} className="dbg-chip">
-                <span>{c.label}</span>
-                <strong>{c.value}</strong>
+          <div className="dbg-facets" aria-label="Job characteristics">
+            {facets.map((f) => (
+              <div key={f.id} className={`dbg-facet tone-${f.tone || 'default'}`}>
+                <span>{f.label}</span>
+                <strong title={f.value}>{f.value}</strong>
               </div>
             ))}
           </div>
+          {lpar ? (
+            <div className="dbg-lease-strip" aria-label="Lease and LPAR">
+              <span className="dbg-lease-k">Lease</span>
+              <code>{a.leaseSlot}</code>
+              <span className="dbg-lease-arrow" aria-hidden>
+                →
+              </span>
+              <strong>{lpar.lpar}</strong>
+              {lpar.hostnameAdditional ? (
+                <>
+                  <span className="muted">+</span>
+                  <strong title="Additional hypervisor">
+                    {lpar.hostnameAdditional.split('.')[0]}
+                  </strong>
+                </>
+              ) : null}
+              {lpar.vxlanBridge ? (
+                <em className="dbg-lease-note">VXLAN {lpar.vxlanBridge}</em>
+              ) : null}
+              {lpar.subnet != null ? (
+                <em className="dbg-lease-note">subnet {lpar.subnet}</em>
+              ) : null}
+              {!lpar.observed ? <em className="muted">inferred</em> : null}
+            </div>
+          ) : null}
         </div>
         <div className="dbg-hero-actions">
           <a className="btn btn-primary" href={a.raw} target="_blank" rel="noreferrer">
@@ -294,27 +358,9 @@ export function ExecutionPage() {
         </section>
       ) : (
         <>
-          <section className="dbg-score" aria-label="Phase duration and step counts">
-            <PhaseTimeline timings={a.phaseTimings} />
-            <div className="dbg-counts" aria-label="Workflow step totals">
-              <div className="dbg-count">
-                <b>{passed}</b>
-                <span>Steps passed</span>
-              </div>
-              <div className="dbg-count fail">
-                <b>{failed}</b>
-                <span>Steps failed</span>
-              </div>
-              <div className="dbg-count run">
-                <b>{pending}</b>
-                <span>Steps pending</span>
-              </div>
-            </div>
-          </section>
+          <FailureFocusBanner a={a} onJump={jumpToStep} />
 
-          {a.testFailures && a.testFailures.failures.length > 0 ? (
-            <TestFailuresPanel report={a.testFailures} />
-          ) : null}
+          {a.testFailures ? <TestFailuresPanel report={a.testFailures} /> : null}
 
           {compareOpen ? (
             <ComparePanel
@@ -326,6 +372,24 @@ export function ExecutionPage() {
               onRetry={runCompare}
             />
           ) : null}
+
+          <section className="dbg-score" aria-label="Phase duration and step counts">
+            <PhaseTimeline timings={a.phaseTimings} />
+            <div className="dbg-counts" aria-label="Workflow step totals">
+              <div className="dbg-count">
+                <b>{passed}</b>
+                <span>Passed</span>
+              </div>
+              <div className="dbg-count fail">
+                <b>{failed}</b>
+                <span>Failed</span>
+              </div>
+              <div className="dbg-count run">
+                <b>{pending}</b>
+                <span>Pending</span>
+              </div>
+            </div>
+          </section>
 
           <section className="dbg-steps-panel">
             <div className="dbg-section-head">
@@ -343,11 +407,17 @@ export function ExecutionPage() {
               const group = a.workflow.filter((w) => w.phase === ph);
               if (!group.length) return null;
               const timing = a.phaseTimings.find((t) => t.phase === ph);
+              const phaseFailed = a.phaseStatus[ph] === 'failed';
               return (
-                <div key={ph} className={`dbg-phase-block ph-${ph}`}>
+                <div
+                  key={ph}
+                  className={`dbg-phase-block ph-${ph}${phaseFailed ? ' is-failed' : ''}`}
+                >
                   <div className="dbg-phase-h">
                     <span className="dbg-phase-name">{ph.toUpperCase()}</span>
-                    <span className="dbg-phase-status">{a.phaseStatus[ph]}</span>
+                    <span className={`dbg-phase-status st-${a.phaseStatus[ph]}`}>
+                      {a.phaseStatus[ph]}
+                    </span>
                     <span className="dbg-phase-dur mono">
                       {timing && timing.timedSteps > 0 ? fmtDur(timing.seconds) : '—'}
                     </span>
@@ -384,124 +454,156 @@ export function ExecutionPage() {
   );
 }
 
+function FailureFocusBanner({
+  a,
+  onJump,
+}: {
+  a: DebugAnalysis;
+  onJump: (name: string | null) => void;
+}) {
+  if (a.result === 'PASSED') {
+    return (
+      <section className="dbg-focus tone-pass" aria-label="Job passed">
+        <p className="dbg-focus-label">Result</p>
+        <h2>All phases passed</h2>
+        <p>PRE → TEST → POST completed successfully.</p>
+      </section>
+    );
+  }
+
+  if (a.result === 'RUNNING') {
+    const cur = a.currentStep;
+    const ph = phaseForStepName(cur);
+    return (
+      <section className="dbg-focus tone-run" aria-label="Job in progress">
+        <p className="dbg-focus-label">In progress</p>
+        <h2>
+          {ph ? `${ph.toUpperCase()} phase` : 'Job'} running
+          {cur ? (
+            <>
+              {' '}
+              · <code>{cur}</code>
+            </>
+          ) : null}
+        </h2>
+        <p>{a.progressSummary}</p>
+        {cur ? (
+          <div className="dbg-focus-actions">
+            <button type="button" className="btn btn-primary" onClick={() => onJump(cur)}>
+              Jump to current step
+            </button>
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
+  const failedPhases = (['pre', 'test', 'post'] as const).filter(
+    (ph) => a.phaseStatus[ph] === 'failed',
+  );
+  const primaryPhase =
+    phaseForStepName(a.firstFailed) ||
+    failedPhases[0] ||
+    null;
+
+  if (!primaryPhase && !failedPhases.length) {
+    return (
+      <section className="dbg-focus tone-fail" aria-label="Job failed">
+        <p className="dbg-focus-label">Failure</p>
+        <h2>Job failed</h2>
+        <p>{a.progressSummary || 'No failed step directory was found under artifacts.'}</p>
+      </section>
+    );
+  }
+
+  const copy = primaryPhase ? PHASE_BLURB[primaryPhase] : null;
+  const failedInPhase = a.workflow.filter(
+    (w) =>
+      w.status === 'failed' &&
+      (!primaryPhase || w.phase === primaryPhase) &&
+      !w.bestEffort,
+  );
+  const secondaryPhases = failedPhases.filter((p) => p !== primaryPhase);
+
+  return (
+    <section className="dbg-focus tone-fail" aria-label="Failure focus">
+      <p className="dbg-focus-label">Where it failed</p>
+      <h2>{copy?.title || 'Job failed'}</h2>
+      <p>{copy?.blurb}</p>
+      {a.firstFailed ? (
+        <p className="dbg-focus-step">
+          Failed step: <code>{a.firstFailed}</code>
+        </p>
+      ) : null}
+      {failedInPhase.length > 1 ? (
+        <ul className="dbg-focus-steps">
+          {failedInPhase.map((w) => (
+            <li key={w.name}>
+              <button type="button" className="dbg-focus-step-link" onClick={() => onJump(w.name)}>
+                {w.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {secondaryPhases.length > 0 ? (
+        <p className="dbg-focus-secondary muted">
+          Also failed later: {secondaryPhases.map((p) => p.toUpperCase()).join(', ')}
+        </p>
+      ) : null}
+      {a.firstFailed ? (
+        <div className="dbg-focus-actions">
+          <button type="button" className="btn btn-primary" onClick={() => onJump(a.firstFailed)}>
+            Jump to failed step
+          </button>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function TestFailuresPanel({ report }: { report: TestFailureReport }) {
-  const [expanded, setExpanded] = useState(true);
-  const [showAllMonitor, setShowAllMonitor] = useState(false);
-  const blocking = report.failures.filter((f) => f.severity === 'blocking');
-  const s = report.summary;
+  const failed = productFailedTests(report);
+  if (!failed.length) return null;
+
+  const junitLinks = report.junitFiles.filter(
+    (f) => !/monitor/i.test(f.name),
+  );
 
   return (
     <section className="dbg-tests" aria-label="Failed test cases">
       <div className="dbg-section-head">
         <h2>
-          Failed tests
-          <span className="dbg-tests-total">{report.failures.length}</span>
+          Failed test cases
+          <span className="dbg-tests-total">{failed.length}</span>
         </h2>
-        <button type="button" className="btn" onClick={() => setExpanded((v) => !v)}>
-          {expanded ? 'Collapse' : 'Expand'}
-        </button>
       </div>
       <p className="dbg-tests-lead">
         From <code>{report.stepName}</code>
         {report.expectedSuite ? (
           <>
             {' '}
-            · job test type <code>{report.expectedSuite}</code>
-          </>
-        ) : null}
-        {s.blockingFail != null ? (
-          <>
-            {' '}
-            · suite run {s.blockingFail} blocking / {s.informingFail ?? 0} informing /{' '}
-            {s.pass ?? '—'} pass / {s.skip ?? '—'} skip
+            · <code>{report.expectedSuite}</code>
           </>
         ) : null}
       </p>
-      <div className="dbg-tests-suites" aria-label="Failures by suite">
-        {report.bySuite.map((g) => (
-          <div key={g.suite} className={`dbg-tests-suite-chip suite-${g.suite}`}>
-            <strong>{g.count}</strong>
-            <span>{g.label}</span>
-          </div>
+      <ul className="dbg-tests-list">
+        {failed.map((t) => (
+          <li key={t.name}>
+            <span className="dbg-tests-suite-tag">{t.suiteTag || t.suite}</span>
+            <code>{cleanTestName(t.name)}</code>
+          </li>
         ))}
-      </div>
-      {expanded && (
-        <>
-          {blocking.length > 0 && (
-            <div className="dbg-tests-block">
-              <h3>Blocking failures ({blocking.length})</h3>
-              <ul className="dbg-tests-list">
-                {blocking.map((t) => (
-                  <li key={t.name}>
-                    <span className="dbg-tests-suite-tag">{t.suiteTag || t.suite}</span>
-                    <code>{t.name.replace(/\s*\[Suite:[^\]]+\]/g, '').trim()}</code>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {report.bySuite.map((g) => {
-            const isMonitor = g.suite === 'monitor';
-            const tests =
-              isMonitor && !showAllMonitor && g.tests.length > 12
-                ? g.tests.slice(0, 12)
-                : g.tests;
-            // Skip duplicating blocking-only group when already listed above and suite is small
-            if (blocking.length && g.tests.every((t) => t.severity === 'blocking') && g.suite !== 'monitor') {
-              return null;
-            }
-            const nonBlocking = tests.filter((t) => t.severity !== 'blocking');
-            const list = blocking.length && g.suite !== 'monitor' ? nonBlocking : tests;
-            if (!list.length && !(isMonitor && g.tests.length)) return null;
-            const show = isMonitor ? tests : list;
-            if (!show.length) return null;
-            return (
-              <div key={`list-${g.suite}`} className="dbg-tests-block">
-                <h3>
-                  {g.label} ({g.count})
-                </h3>
-                <ul className="dbg-tests-list">
-                  {show.map((t) => (
-                    <li key={`${g.suite}-${t.name}`}>
-                      {t.severity === 'blocking' ? (
-                        <span className="dbg-tests-sev">blocking</span>
-                      ) : t.severity === 'informing' ? (
-                        <span className="dbg-tests-sev informing">informing</span>
-                      ) : null}
-                      <code>{t.name.replace(/\s*\[Suite:[^\]]+\]/g, '').trim()}</code>
-                    </li>
-                  ))}
-                </ul>
-                {isMonitor && g.tests.length > 12 && (
-                  <button
-                    type="button"
-                    className="btn wg-more-btn"
-                    onClick={() => setShowAllMonitor((v) => !v)}
-                  >
-                    {showAllMonitor ? 'Show fewer monitor failures' : `Show all ${g.count} monitor failures`}
-                  </button>
-                )}
-              </div>
-            );
-          })}
-          {report.junitFiles.length > 0 && (
-            <div className="dbg-tests-links">
-              {report.junitFiles.map((f) => (
-                <a key={f.url} className="btn" href={f.url} target="_blank" rel="noreferrer">
-                  {f.name}
-                </a>
-              ))}
-            </div>
-          )}
-          {report.notes.length > 0 && (
-            <ul className="dbg-tests-notes">
-              {report.notes.map((n) => (
-                <li key={n}>{n}</li>
-              ))}
-            </ul>
-          )}
-        </>
-      )}
+      </ul>
+      {junitLinks.length > 0 ? (
+        <div className="dbg-tests-links">
+          {junitLinks.map((f) => (
+            <a key={f.url} className="btn" href={f.url} target="_blank" rel="noreferrer">
+              {f.name} ↗
+            </a>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -607,13 +709,13 @@ function ComparePanel({
           {result.newFailedTests.length > 0 && (
             <div className="dbg-compare-tests">
               <h3>
-                Failing tests vs green
+                New failed tests vs green
                 <span className="dbg-tests-total">{result.newFailedTests.length}</span>
               </h3>
-              <ul className="dbg-tests-list">
+              <ul className="dbg-tests-list dbg-tests-list-plain">
                 {result.newFailedTests.slice(0, 40).map((t) => (
                   <li key={t}>
-                    <code>{t}</code>
+                    <code>{cleanTestName(t)}</code>
                   </li>
                 ))}
               </ul>
@@ -680,6 +782,25 @@ function JobDetailsPanel({
                   </dd>
                 </div>
                 <div>
+                  <dt>Topology</dt>
+                  <dd>
+                    {a.meta.topologyShort || a.meta.topology}
+                    {a.meta.workerArch ? (
+                      <div className="dbg-fact-meta">Workers: {a.meta.workerArch}</div>
+                    ) : null}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Installer / suite</dt>
+                  <dd>
+                    {a.meta.installerLabel || a.meta.installer}
+                    {' · '}
+                    {a.meta.suiteLabel || a.meta.testType}
+                    {a.meta.fips ? ' · FIPS' : ''}
+                    {a.meta.techPreview ? ' · TechPreview' : ''}
+                  </dd>
+                </div>
+                <div>
                   <dt>Lease → LPAR</dt>
                   <dd>
                     {a.leaseSlot ? (
@@ -696,8 +817,24 @@ function JobDetailsPanel({
                     ) : (
                       <span className="muted">Not in build-log / step logs yet</span>
                     )}
-                    {a.lease?.pool ? (
-                      <div className="dbg-fact-meta mono">{a.lease.pool}</div>
+                    {a.lease?.pool || lpar?.pool ? (
+                      <div className="dbg-fact-meta mono">{a.lease?.pool || lpar?.pool}</div>
+                    ) : null}
+                    {lpar?.hostnameAdditional ? (
+                      <div className="dbg-fact-meta">
+                        Additional HV: <code>{lpar.hostnameAdditional}</code>
+                      </div>
+                    ) : null}
+                    {lpar?.vxlanBridge || lpar?.subnet != null || lpar?.httpd ? (
+                      <div className="dbg-fact-meta">
+                        {[
+                          lpar.vxlanBridge ? `VXLAN ${lpar.vxlanBridge}` : null,
+                          lpar.subnet != null ? `subnet ${lpar.subnet}` : null,
+                          lpar.httpd ? `httpd ${lpar.httpd}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </div>
                     ) : null}
                   </dd>
                 </div>
@@ -711,7 +848,7 @@ function JobDetailsPanel({
                           {a.lease?.connectionSource
                             ? `from ${a.lease.connectionSource}`
                             : lpar && !lpar.observed
-                              ? 'inferred from lease index'
+                              ? 'inferred from lease catalog'
                               : null}
                         </div>
                       </>

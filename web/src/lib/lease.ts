@@ -55,7 +55,10 @@ export function parseLeaseFromProwLog(prowLog: string | null): {
     /Acquired\s+\d+\s+lease\([^)]*\)\s+for\s+(\S+):\s*\[(libvirt-s390x[a-z0-9-]*)\]/i,
   );
   if (m) return { pool: m[1], slot: m[2] };
-  const m2 = text.match(/Acquired.*\[(libvirt-s390x[a-z0-9-]+)\]/i);
+  // Also catch vpn-amd64 / arm64 / oz forms inside brackets
+  const m2 = text.match(
+    /Acquired.*\[(libvirt-s390x(?:-vpn-amd64|-arm64|-oz)?-\d+-\d+|libvirt-s390x-\d+-\d+)\]/i,
+  );
   if (m2) return { pool: null, slot: m2[1] };
   return null;
 }
@@ -70,6 +73,8 @@ export function parseLeaseFromSteps(
     const text = stripAnsi(log);
     const env = text.match(/LEASED_RESOURCE[=:\s]+(['"]?)(libvirt-s390x[a-z0-9-]*)\1/i);
     if (env) return { slot: env[2], source: `${name}/build-log.txt` };
+    const vpnAmd = text.match(/\b(libvirt-s390x-vpn-amd64-\d+-\d+)\b/);
+    if (vpnAmd) return { slot: vpnAmd[1], source: `${name}/build-log.txt` };
     const oz = text.match(/\b(libvirt-s390x-oz-\d+-\d+)\b/);
     if (oz) return { slot: oz[1], source: `${name}/build-log.txt` };
     const arm = text.match(/\b(libvirt-s390x-arm64-\d+-\d+)\b/);

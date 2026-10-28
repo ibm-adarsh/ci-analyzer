@@ -57,8 +57,17 @@ describe('meta classification', () => {
     expect(parseJobMeta('…libvirt-multi-z-z').profile).toBe('libvirt-s390x-vpn');
     expect(parseJobMeta('…libvirt-multi-z-za').profile).toBe('libvirt-s390x-vpn-arm64');
     expect(parseJobMeta('…libvirt-multi-z-xz').profile).toBe('libvirt-s390x-amd64');
+    expect(parseJobMeta('nightly-5.0-…libvirt-multi-z-xz').profile).toBe(
+      'libvirt-s390x-vpn-amd64',
+    );
     expect(parseJobMeta('…libvirt-multi-z-za').workflow).toBe(
+      'openshift-e2e-libvirt-heterogeneous-vpn',
+    );
+    expect(parseJobMeta('…libvirt-multi-z-xz').workflow).toBe(
       'openshift-e2e-libvirt-upi-heterogeneous',
+    );
+    expect(parseJobMeta('nightly-5.0-…libvirt-multi-z-xz').workflow).toBe(
+      'openshift-e2e-libvirt-heterogeneous-vpn',
     );
     expect(parseJobMeta('…fips…libvirt-multi-z-z').workflow).toBe(
       'openshift-e2e-libvirt-vpn-fips',
@@ -66,10 +75,15 @@ describe('meta classification', () => {
     expect(parseJobMeta('…ocp-image-ecosystem…libvirt-multi-z-z').testType).toBe(
       'image-ecosystem',
     );
-    expect(parseJobMeta('…agent-remote-libvirt-multi-z-z').testType).toBe('agent-based');
+    const agent = parseJobMeta('…agent-remote-libvirt-multi-z-z');
+    expect(agent.installerKind).toBe('agent');
+    expect(agent.testType).toBe('conformance-parallel');
+    expect(agent.topologyShort).toBe('Homogeneous (z-z)');
     expect(parseJobMeta('…upgrade-from-nightly-4.14-ocp-ovn-remote-libvirt-s390x').fromVersion).toBe(
       '4.14',
     );
+    expect(parseJobMeta('…fips…techpreview…libvirt-multi-z-z').techPreview).toBe(true);
+    expect(parseJobMeta('…fips…techpreview…libvirt-multi-z-z').fips).toBe(true);
   });
 });
 

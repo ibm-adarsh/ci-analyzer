@@ -1,5 +1,7 @@
 export type LparInfo = {
   lpar: string;
+  /** Full hostname when known, e.g. lnxocp01.phc-cicd.cis.ibm.net */
+  hostname?: string;
   sshd: string;
   zone: string;
   slotNum?: number;
@@ -7,50 +9,217 @@ export type LparInfo = {
   profile?: string;
   qemuUri?: string;
   tcpPort?: number;
+  /** Heterogeneous additional hypervisor (x86 / arm) when applicable */
+  hostnameAdditional?: string;
+  subnet?: number | string;
+  vxlanBridge?: string;
+  httpd?: string;
+  notes?: string;
   /** true when hostname came from step logs (leases secret), not the static map */
   observed?: boolean;
 };
 
+export type LeaseRecord = {
+  /** Boskos lease name, e.g. libvirt-s390x-0-1 */
+  slot: string;
+  lpar: string;
+  hostname: string;
+  subnet: number | string;
+  pool: string;
+  profile: string;
+  zone: 'YZ' | 'OZ';
+  tcpPort?: number;
+  notes?: string;
+  /** Heterogeneous secondary hypervisor */
+  hostnameAdditional?: string;
+  vxlanBridge?: string;
+  httpd?: string;
+  workerArch?: 'amd64' | 'arm64';
+};
+
+const DOMAIN = 'phc-cicd.cis.ibm.net';
+
+function host(lpar: string): string {
+  return `${lpar}.${DOMAIN}`;
+}
+
 /**
- * Fallback LPAR index → short hostname for libvirt-s390x-vpn.
- * Authoritative mapping is ${CLUSTER_PROFILE_DIR}/leases (printed in step logs as
- * "Using libvirt connection for qemu+tcp://…"). Keep this map aligned with observed
- * jobs; prefer parseLibvirtConnectionFromSteps when available.
+ * Authoritative LPAR ↔ lease index for IBM Z libvirt (phc-cicd.cis.ibm.net).
+ * Prefer step-log qemu URI when present; this map is the offline fallback.
  *
- * Verified (2026-10):
- *   libvirt-s390x-0-* → lnxocp01
- *   libvirt-s390x-2-* → lnxocp04  (was incorrectly documented as lnxocp06)
+ * YZ (vpn): lnxocp01/02/04 · OZ (vpn-oz): lnxocp11–14 · hetero carve-outs on lnxocp11.
  */
+export const LEASE_CATALOG: LeaseRecord[] = [
+  // ── lnxocp01 · libvirt-s390x-0-* · YZ vpn ──
+  ...([0, 1, 2, 3] as const).map((n) => ({
+    slot: `libvirt-s390x-0-${n}`,
+    lpar: 'lnxocp01',
+    hostname: host('lnxocp01'),
+    subnet: n === 0 ? 126 : n,
+    pool: 'libvirt-s390x-vpn-quota-slice',
+    profile: 'libvirt-s390x-vpn',
+    zone: 'YZ' as const,
+    tcpPort: 16509,
+  })),
+
+  // ── lnxocp02 · libvirt-s390x-1-* ──
+  ...([0, 1, 2, 3] as const).map((n) => ({
+    slot: `libvirt-s390x-1-${n}`,
+    lpar: 'lnxocp02',
+    hostname: host('lnxocp02'),
+    subnet: n === 0 ? 126 : n,
+    pool: 'libvirt-s390x-vpn-quota-slice',
+    profile: 'libvirt-s390x-vpn',
+    zone: 'YZ' as const,
+    tcpPort: 16509,
+  })),
+
+  // ── lnxocp04 · libvirt-s390x-2-* ──
+  ...([0, 1, 2, 3] as const).map((n) => ({
+    slot: `libvirt-s390x-2-${n}`,
+    lpar: 'lnxocp04',
+    hostname: host('lnxocp04'),
+    subnet: n === 0 ? 126 : n,
+    pool: 'libvirt-s390x-vpn-quota-slice',
+    profile: 'libvirt-s390x-vpn',
+    zone: 'YZ' as const,
+    tcpPort: 16509,
+  })),
+
+  // ── lnxocp11 · OZ · oz-0-0 + hetero carve-outs ──
+  {
+    slot: 'libvirt-s390x-oz-0-0',
+    lpar: 'lnxocp11',
+    hostname: host('lnxocp11'),
+    subnet: 126,
+    pool: 'libvirt-s390x-vpn-oz-quota-slice',
+    profile: 'libvirt-s390x-vpn-oz',
+    zone: 'OZ',
+    tcpPort: 16509,
+  },
+  {
+    slot: 'libvirt-s390x-vpn-amd64-0-0',
+    lpar: 'lnxocp11',
+    hostname: host('lnxocp11'),
+    hostnameAdditional: host('xkvmocp08'),
+    subnet: 1,
+    pool: 'libvirt-s390x-vpn-amd64-quota-slice',
+    profile: 'libvirt-s390x-vpn-amd64',
+    zone: 'OZ',
+    tcpPort: 16509,
+    vxlanBridge: 'ocp1-amd',
+    httpd: '192.168.1.1:8080',
+    workerArch: 'amd64',
+    notes: 'vpn-amd64 · VXLAN ocp1-amd · workers on xkvmocp08',
+  },
+  {
+    slot: 'libvirt-s390x-arm64-0-0',
+    lpar: 'lnxocp11',
+    hostname: host('lnxocp11'),
+    hostnameAdditional: host('akvmocp03'),
+    subnet: 2,
+    pool: 'libvirt-s390x-vpn-arm64-quota-slice',
+    profile: 'libvirt-s390x-vpn-arm64',
+    zone: 'OZ',
+    tcpPort: 16509,
+    vxlanBridge: 'ocp2-arm',
+    httpd: '192.168.2.1:8080',
+    workerArch: 'arm64',
+    notes: 'arm64 · VXLAN ocp2-arm · workers on akvmocp03',
+  },
+  {
+    slot: 'libvirt-s390x-vpn-amd64-0-1',
+    lpar: 'lnxocp11',
+    hostname: host('lnxocp11'),
+    hostnameAdditional: host('xkvmocp08'),
+    subnet: 3,
+    pool: 'libvirt-s390x-vpn-amd64-quota-slice',
+    profile: 'libvirt-s390x-vpn-amd64',
+    zone: 'OZ',
+    tcpPort: 16509,
+    vxlanBridge: 'ocp3-amd',
+    httpd: '192.168.3.1:8080',
+    workerArch: 'amd64',
+    notes: 'vpn-amd64 · VXLAN ocp3-amd · workers on xkvmocp08',
+  },
+
+  // ── lnxocp12 · oz-1-* ──
+  ...([0, 1, 2, 3] as const).map((n) => ({
+    slot: `libvirt-s390x-oz-1-${n}`,
+    lpar: 'lnxocp12',
+    hostname: host('lnxocp12'),
+    subnet: n === 0 ? 126 : n,
+    pool: 'libvirt-s390x-vpn-oz-quota-slice',
+    profile: 'libvirt-s390x-vpn-oz',
+    zone: 'OZ' as const,
+    tcpPort: 16509,
+  })),
+
+  // ── lnxocp13 · oz-2-* ──
+  ...([0, 1, 2, 3] as const).map((n) => ({
+    slot: `libvirt-s390x-oz-2-${n}`,
+    lpar: 'lnxocp13',
+    hostname: host('lnxocp13'),
+    subnet: n === 0 ? 126 : n,
+    pool: 'libvirt-s390x-vpn-oz-quota-slice',
+    profile: 'libvirt-s390x-vpn-oz',
+    zone: 'OZ' as const,
+    tcpPort: 16509,
+  })),
+
+  // ── lnxocp14 · oz-3-* (also used by vpn-hcp pool in boskos) ──
+  ...([0, 1, 2, 3] as const).map((n) => ({
+    slot: `libvirt-s390x-oz-3-${n}`,
+    lpar: 'lnxocp14',
+    hostname: host('lnxocp14'),
+    subnet: n === 0 ? 126 : n,
+    pool: 'libvirt-s390x-vpn-oz-quota-slice',
+    profile: 'libvirt-s390x-vpn-oz',
+    zone: 'OZ' as const,
+    tcpPort: 16509,
+  })),
+];
+
+export const LEASE_BY_SLOT: Record<string, LeaseRecord> = Object.fromEntries(
+  LEASE_CATALOG.map((r) => [r.slot, r]),
+);
+
+/** @deprecated Prefer LEASE_BY_SLOT — kept for older call sites */
 export const LPAR_MAP: Record<number, Omit<LparInfo, 'qemuUri' | 'slotNum' | 'observed'>> = {
   0: {
     lpar: 'lnxocp01',
+    hostname: host('lnxocp01'),
     sshd: 'sshd-0',
-    zone: 'OZ',
+    zone: 'YZ',
     profile: 'libvirt-s390x-vpn',
     pool: 'libvirt-s390x-vpn-quota-slice',
     tcpPort: 16509,
   },
   1: {
     lpar: 'lnxocp02',
+    hostname: host('lnxocp02'),
     sshd: 'sshd-1',
-    zone: 'OZ',
+    zone: 'YZ',
     profile: 'libvirt-s390x-vpn',
     pool: 'libvirt-s390x-vpn-quota-slice',
     tcpPort: 16509,
   },
   2: {
     lpar: 'lnxocp04',
+    hostname: host('lnxocp04'),
     sshd: 'sshd-2',
-    zone: 'OZ',
+    zone: 'YZ',
     profile: 'libvirt-s390x-vpn',
     pool: 'libvirt-s390x-vpn-quota-slice',
     tcpPort: 16509,
   },
 };
 
+/** @deprecated Prefer LEASE_BY_SLOT */
 export const LPAR_MAP_OZ: Record<number, Omit<LparInfo, 'qemuUri' | 'slotNum' | 'observed'>> = {
   0: {
     lpar: 'lnxocp11',
+    hostname: host('lnxocp11'),
     sshd: 'sshd-11',
     zone: 'OZ',
     profile: 'libvirt-s390x-vpn-oz',
@@ -59,6 +228,7 @@ export const LPAR_MAP_OZ: Record<number, Omit<LparInfo, 'qemuUri' | 'slotNum' | 
   },
   1: {
     lpar: 'lnxocp12',
+    hostname: host('lnxocp12'),
     sshd: 'sshd-12',
     zone: 'OZ',
     profile: 'libvirt-s390x-vpn-oz',
@@ -67,6 +237,7 @@ export const LPAR_MAP_OZ: Record<number, Omit<LparInfo, 'qemuUri' | 'slotNum' | 
   },
   2: {
     lpar: 'lnxocp13',
+    hostname: host('lnxocp13'),
     sshd: 'sshd-13',
     zone: 'OZ',
     profile: 'libvirt-s390x-vpn-oz',
@@ -75,6 +246,7 @@ export const LPAR_MAP_OZ: Record<number, Omit<LparInfo, 'qemuUri' | 'slotNum' | 
   },
   3: {
     lpar: 'lnxocp14',
+    hostname: host('lnxocp14'),
     sshd: 'sshd-14',
     zone: 'OZ',
     profile: 'libvirt-s390x-vpn-oz',
@@ -82,3 +254,23 @@ export const LPAR_MAP_OZ: Record<number, Omit<LparInfo, 'qemuUri' | 'slotNum' | 
     tcpPort: 16509,
   },
 };
+
+export function leaseRecordToLpar(rec: LeaseRecord, slotNum?: number): LparInfo {
+  return {
+    lpar: rec.lpar,
+    hostname: rec.hostname,
+    sshd: '',
+    zone: rec.zone,
+    slotNum,
+    pool: rec.pool,
+    profile: rec.profile,
+    tcpPort: rec.tcpPort || 16509,
+    qemuUri: `qemu+tcp://${rec.hostname}/system`,
+    hostnameAdditional: rec.hostnameAdditional,
+    subnet: rec.subnet,
+    vxlanBridge: rec.vxlanBridge,
+    httpd: rec.httpd,
+    notes: rec.notes,
+    observed: false,
+  };
+}

@@ -24,15 +24,28 @@ export interface ParsedUrl {
   raw: string;
 }
 
+export type TopologyKind = 'homogeneous' | 'heterogeneous' | 'single-arch' | 'unknown';
+export type InstallerKind = 'agent' | 'upi' | 'unknown';
+
 export interface JobMeta {
   isRehearse: boolean;
   ocpVersion: string | null;
   fromVersion: string | null;
+  /** Suite key: conformance-parallel | conformance-serial | upgrade | image-ecosystem */
   testType: string;
+  /** Human suite label for UI */
+  suiteLabel?: string;
   installer: string;
+  installerKind?: InstallerKind;
+  installerLabel?: string;
   fips: boolean;
   techPreview: boolean;
   topology: string;
+  topologyKind?: TopologyKind;
+  /** Short UI label, e.g. Homogeneous (z-z) */
+  topologyShort?: string;
+  /** Additional worker arch for hetero jobs (amd64 / arm64) */
+  workerArch?: string | null;
   arch: string;
   profile: string;
   workflow: string | null;

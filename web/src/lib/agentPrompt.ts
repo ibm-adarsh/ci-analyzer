@@ -1,6 +1,6 @@
 import type { DebugAnalysis } from './analyze';
 import type { WorkflowStepView } from './analyze';
-import { WORKFLOW_SOURCE } from '../data/vpnWorkflow';
+import { WORKFLOW_DOCS, WORKFLOW_SOURCE } from '../data/vpnWorkflow';
 import { fmtDur } from './gcs';
 
 const TAIL_LINES = 80;
@@ -43,19 +43,22 @@ export function buildAgentPrompt(a: DebugAnalysis): string {
   }
   lines.push('');
 
+  const wfName = a.meta.workflow || WORKFLOW_SOURCE.name;
+  const wfDocs = WORKFLOW_DOCS[wfName] || WORKFLOW_SOURCE;
   lines.push(section('Context'));
   lines.push(`Cluster profile: ${a.meta.profile}`);
-  lines.push(`Topology: ${a.meta.topology}`);
-  lines.push(`Workflow: ${a.meta.workflow || WORKFLOW_SOURCE.name}`);
-  lines.push(`Workflow docs: ${WORKFLOW_SOURCE.stepsCi}`);
-  lines.push(`Workflow YAML: ${WORKFLOW_SOURCE.yaml}`);
+  lines.push(`Topology: ${a.meta.topologyShort || a.meta.topology}`);
+  if (a.meta.workerArch) lines.push(`Worker arch: ${a.meta.workerArch}`);
+  lines.push(`Workflow: ${wfName}`);
+  lines.push(`Workflow docs: ${wfDocs.stepsCi}`);
+  lines.push(`Workflow YAML: ${wfDocs.yaml}`);
   lines.push(
     `OCP / BRANCH: ${a.meta.ocpVersion || 'unknown'}${a.meta.fromVersion ? ` (upgrade from ${a.meta.fromVersion})` : ''}`,
   );
   lines.push(
-    `Test type: ${a.meta.testType}${a.meta.fips ? ' · FIPS' : ''}${a.meta.techPreview ? ' · TechPreview' : ''}`,
+    `Suite: ${a.meta.suiteLabel || a.meta.testType}${a.meta.fips ? ' · FIPS' : ''}${a.meta.techPreview ? ' · TechPreview' : ''}`,
   );
-  lines.push(`Installer: ${a.meta.installer}`);
+  lines.push(`Installer: ${a.meta.installerLabel || a.meta.installer}`);
   lines.push(`Artifact test subdir: ${a.testSubdir || 'n/a'}`);
   if (a.leaseSlot) {
     lines.push(`Boskos lease: ${a.leaseSlot}`);
@@ -115,29 +118,32 @@ export function buildAgentPrompt(a: DebugAnalysis): string {
 
   if (a.testFailures && a.testFailures.failures.length) {
     const tf = a.testFailures;
-    lines.push(section('Failed test cases'));
-    const s = tf.summary;
-    if (s.blockingFail != null) {
-      lines.push(
-        `Suite run summary: ${s.blockingFail} blocking fail, ${s.informingFail ?? 0} informing fail, ${s.pass ?? '?'} pass, ${s.skip ?? '?'} skip`,
-      );
-    }
-    lines.push(`Total listed failures: ${tf.failures.length}`);
-    for (const g of tf.bySuite) {
-      lines.push(`${g.label}: ${g.count}`);
-      for (const t of g.tests.slice(0, g.suite === 'monitor' ? 15 : 40)) {
+    const product = tf.failures.filter(
+      (f) =>
+        f.severity === 'blocking' ||
+        (f.severity !== 'informing' && f.suite !== 'monitor'),
+    );
+    const cases = product.length ? product : tf.failures.filter((f) => f.suite !== 'monitor');
+    if (cases.length) {
+      lines.push(section('Failed test cases'));
+      const s = tf.summary;
+      if (s.blockingFail != null) {
+        lines.push(`Blocking failures (suite summary): ${s.blockingFail}`);
+      }
+      lines.push(`Failed test cases: ${cases.length}`);
+      for (const t of cases.slice(0, 40)) {
         lines.push(
-          `  - [${t.severity}] ${t.name.replace(/\s*\[Suite:[^\]]+\]/g, '').trim()}${
+          `  - ${t.name.replace(/\s*\[Suite:[^\]]+\]/g, '').trim()}${
             t.suiteTag ? ` (Suite:${t.suiteTag})` : ''
           }`,
         );
       }
-      if (g.tests.length > (g.suite === 'monitor' ? 15 : 40)) {
-        lines.push(`  … +${g.tests.length - (g.suite === 'monitor' ? 15 : 40)} more`);
+      if (cases.length > 40) lines.push(`  … +${cases.length - 40} more`);
+      for (const j of tf.junitFiles.filter((f) => !/monitor/i.test(f.name))) {
+        lines.push(`JUnit: ${j.url}`);
       }
+      lines.push('');
     }
-    for (const j of tf.junitFiles) lines.push(`JUnit: ${j.url}`);
-    lines.push('');
   }
 
   if (!(a.firstFailed || failed.length) && a.result === 'RUNNING' && current) {

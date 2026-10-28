@@ -1,4 +1,10 @@
-import { LPAR_MAP, LPAR_MAP_OZ, type LparInfo } from '../data/lpar';
+import {
+  LEASE_BY_SLOT,
+  LPAR_MAP,
+  LPAR_MAP_OZ,
+  leaseRecordToLpar,
+  type LparInfo,
+} from '../data/lpar';
 import type { LeaseInfo } from './lease';
 
 function shortHost(hostname: string): string {
@@ -8,61 +14,65 @@ function shortHost(hostname: string): string {
 /**
  * Resolve Boskos lease slot → LPAR host details.
  * When LeaseInfo includes an observed qemu URI/hostname from step logs, that wins
- * over the static index map (the leases secret is authoritative).
+ * over the static catalog (the leases secret is authoritative).
  */
 export function resolveLpar(slot: string, lease?: LeaseInfo | null): LparInfo | null {
   if (!slot) return null;
 
+  const fromMap = resolveFromMap(slot);
+
   if (lease?.hostname || lease?.qemuUri) {
     const host = lease.hostname || '';
     const short = host ? shortHost(host) : undefined;
-    const fromMap = resolveFromMap(slot);
     return {
+      ...(fromMap || {
+        lpar: short || host || 'unknown',
+        sshd: '',
+        zone: 'OZ',
+        tcpPort: 16509,
+      }),
       lpar: short || fromMap?.lpar || host || 'unknown',
-      sshd: fromMap?.sshd || '',
-      zone: fromMap?.zone || 'OZ',
-      slotNum: fromMap?.slotNum,
+      hostname: host || fromMap?.hostname,
       pool: lease.pool || fromMap?.pool,
-      profile: fromMap?.profile,
-      tcpPort: fromMap?.tcpPort || 16509,
-      qemuUri: lease.qemuUri || (host ? `qemu+tcp://${host}/system` : undefined),
+      qemuUri: lease.qemuUri || (host ? `qemu+tcp://${host}/system` : fromMap?.qemuUri),
       observed: true,
     };
   }
 
-  return resolveFromMap(slot);
+  return fromMap;
 }
 
 function resolveFromMap(slot: string): LparInfo | null {
+  const rec = LEASE_BY_SLOT[slot];
+  if (rec) {
+    const slotNumM = slot.match(/-(\d+)$/);
+    return leaseRecordToLpar(rec, slotNumM ? Number(slotNumM[1]) : undefined);
+  }
+
+  // Legacy fallbacks for patterns not in the catalog
   const oz = slot.match(/^libvirt-s390x-oz-(\d+)-(\d+)$/);
   if (oz) {
-    const lparIdx = Number(oz[1]);
-    const slotNum = Number(oz[2]);
-    const base = LPAR_MAP_OZ[lparIdx];
+    const base = LPAR_MAP_OZ[Number(oz[1])];
     if (!base) return null;
     return {
       ...base,
-      slotNum,
-      // Steps use hostname without :port; keep short form for inferred fallback.
-      qemuUri: `qemu+tcp://${base.lpar}/system`,
+      slotNum: Number(oz[2]),
+      qemuUri: `qemu+tcp://${base.hostname || base.lpar}/system`,
       observed: false,
     };
   }
 
-  const m = slot.match(/^libvirt-s390x-(\d+)-(\d+)$/);
-  if (m) {
-    const lparIdx = Number(m[1]);
-    const slotNum = Number(m[2]);
-    const base = LPAR_MAP[lparIdx];
+  const std = slot.match(/^libvirt-s390x-(\d+)-(\d+)$/);
+  if (std) {
+    const base = LPAR_MAP[Number(std[1])];
     if (!base) return null;
     return {
       ...base,
-      slotNum,
-      qemuUri: `qemu+tcp://${base.lpar}/system`,
+      slotNum: Number(std[2]),
+      qemuUri: `qemu+tcp://${base.hostname || base.lpar}/system`,
       observed: false,
     };
   }
 
-  // e.g. libvirt-s390x-arm64-0-0 — no static host map; wait for step-log URI
   return null;
 }
