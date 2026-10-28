@@ -29,16 +29,19 @@ const EXAMPLES = [
   {
     label: 'Failed upgrade',
     hint: '5.0 ← 4.22 · z-z',
+    tone: 'fail' as const,
     url: 'https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-openshift-multiarch-main-nightly-5.0-upgrade-from-nightly-4.22-ocp-ovn-remote-libvirt-multi-z-z/2107456138294333440',
   },
   {
     label: 'Passed serial',
     hint: '5.0 · e2e-serial',
+    tone: 'pass' as const,
     url: 'https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-openshift-multiarch-main-nightly-5.0-ocp-e2e-serial-ovn-remote-libvirt-multi-z-z/2107441095997657088',
   },
   {
     label: 'Failed FIPS',
     hint: '4.23 · techpreview',
+    tone: 'fail' as const,
     url: 'https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-openshift-multiarch-main-nightly-4.23-ocp-fips-ovn-techpreview-multi-z-z/2107396006764089344',
   },
 ];
@@ -78,43 +81,63 @@ export function HomePage() {
   return (
     <div className="home">
       <section className="home-hero">
+        <div className="home-hero-glow" aria-hidden />
         <p className="home-kicker">IBM Z · OpenShift CI</p>
         <h1>
           <span className="home-hero-line">Paste a Prow CI Job link.</span>
           <span className="home-hero-line home-hero-accent">Get the debug path.</span>
         </h1>
         <p className="home-lead">
-          See failed tests, PRE → TEST → POST timing, logs, and release context for IBM&nbsp;Z
-          libvirt jobs—without digging through GCS.
+          Turn one job URL into failed tests, phase timing, logs, and release context for IBM&nbsp;Z
+          libvirt—without digging through GCS.
         </p>
+
+        <ul className="home-caps" aria-label="What you get">
+          <li>Failed tests</li>
+          <li>PRE → TEST → POST</li>
+          <li>Step logs</li>
+          <li>Release · lease</li>
+        </ul>
 
         <div className="home-paste">
           <label htmlFor="prow-url">Prow CI Job URL</label>
-          <div className="home-paste-row">
-            <input
-              id="prow-url"
-              autoFocus
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && go(url)}
-              placeholder="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/…"
-              spellCheck={false}
-            />
-            <button type="button" className="btn btn-primary home-go" onClick={() => go(url)}>
-              Debug
-            </button>
+          <div className="home-paste-well">
+            <div className="home-paste-row">
+              <input
+                id="prow-url"
+                autoFocus
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && go(url)}
+                placeholder="https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/…"
+                spellCheck={false}
+              />
+              <button type="button" className="btn btn-primary home-go" onClick={() => go(url)}>
+                Debug
+              </button>
+            </div>
           </div>
           {err && <div className="error-banner">{err}</div>}
         </div>
 
         <div className="home-examples">
-          <span>Try</span>
-          {EXAMPLES.map((ex) => (
-            <button key={ex.label} type="button" className="home-ex" onClick={() => go(ex.url)}>
-              <strong>{ex.label}</strong>
-              <em>{ex.hint}</em>
-            </button>
-          ))}
+          <span className="home-examples-label">Try a sample</span>
+          <div className="home-examples-row">
+            {EXAMPLES.map((ex) => (
+              <button
+                key={ex.label}
+                type="button"
+                className={`home-ex tone-${ex.tone}`}
+                onClick={() => go(ex.url)}
+              >
+                <span className="home-ex-dot" aria-hidden />
+                <span className="home-ex-text">
+                  <strong>{ex.label}</strong>
+                  <em>{ex.hint}</em>
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 
