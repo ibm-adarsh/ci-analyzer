@@ -6,8 +6,10 @@ import {
   parseBlockingFailuresFromLog,
   parseFailedTestsFromJunitXml,
   parseJunitFilenamesFromLog,
+  applyLifecycleSeverity,
   parseSuiteRunSummary,
   parseTestFailuresSummaryJson,
+  testNamesMatch,
 } from './junit';
 
 const SAMPLE_LOG = `
@@ -87,7 +89,7 @@ describe('junit suite classification', () => {
     ).toBe(false);
   });
 
-  it('parses test-failures-summary JSON as authoritative blocking failures', () => {
+  it('parses test-failures-summary JSON (severity applied separately)', () => {
     const json = JSON.stringify({
       Tests: [
         {
@@ -102,11 +104,58 @@ describe('junit suite classification', () => {
     });
     const fails = parseTestFailuresSummaryJson(json, 'upgrade');
     expect(fails).toHaveLength(1);
-    expect(fails[0].severity).toBe('blocking');
+    expect(fails[0].severity).toBe('unknown');
     expect(fails[0].source).toBe('failures-summary');
     expect(fails[0].suite).toBe('monitor');
     expect(fails[0].name).toContain('API LBs follow /readyz');
+    applyLifecycleSeverity(fails, [], {
+      blockingFail: null,
+      informingFail: null,
+      pass: null,
+      skip: null,
+    });
+    expect(fails[0].severity).toBe('blocking');
     expect(parseTestFailuresSummaryJson('{"Tests":[]}')).toEqual([]);
     expect(parseTestFailuresSummaryJson('not-json')).toEqual([]);
+  });
+
+  it('splits summary fails into 1 blocking + N informing from the log list', () => {
+    const blockingName =
+      '[sig-api-machinery][Feature:APIServer][Late] API LBs follow /readyz of kube-apiserver and stop sending requests [Suite:openshift/conformance/parallel]';
+    const summaryJson = JSON.stringify({
+      Tests: [
+        {
+          Test: {
+            Name: '[Feature:NetworkSegmentation][ovn-kubernetes-ote][sig-network] Network Segmentation foo',
+          },
+        },
+        { Test: { Name: blockingName } },
+        {
+          Test: {
+            Name: '[sig-cli] Workloads client test ROSA extract oc',
+          },
+        },
+      ],
+    });
+    const fails = parseTestFailuresSummaryJson(summaryJson, 'conformance-parallel');
+    expect(fails).toHaveLength(3);
+    expect(testNamesMatch(blockingName, fails[1].name)).toBe(true);
+    applyLifecycleSeverity(
+      fails,
+      [
+        {
+          name: blockingName,
+          suite: 'conformance-parallel',
+          suiteTag: 'openshift/conformance/parallel',
+          source: 'blocking-log',
+          junitFile: null,
+          severity: 'blocking',
+        },
+      ],
+      { blockingFail: 1, informingFail: 5, pass: 1713, skip: 2094 },
+    );
+    expect(fails.filter((f) => f.severity === 'blocking')).toHaveLength(1);
+    expect(fails.filter((f) => f.severity === 'informing')).toHaveLength(2);
+    expect(fails.find((f) => f.severity === 'blocking')?.name).toContain('API LBs follow /readyz');
   });
 });

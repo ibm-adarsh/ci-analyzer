@@ -174,9 +174,53 @@ export function isStabilityWrapperTest(name: string): boolean {
   );
 }
 
+/** Strip [Suite:…] so blocking-log and summary names can match. */
+export function normalizeTestName(name: string): string {
+  return name.replace(/\s*\[Suite:[^\]]+\]/g, '').trim();
+}
+
+export function testNamesMatch(a: string, b: string): boolean {
+  const na = normalizeTestName(a);
+  const nb = normalizeTestName(b);
+  return na === nb || na.startsWith(nb) || nb.startsWith(na);
+}
+
+/**
+ * Mark summary/JUnit failures as blocking vs informing using the build-log
+ * "Blocking test failures" list and "N blocking fail, M informing fail" line.
+ */
+export function applyLifecycleSeverity(
+  failures: FailedTestCase[],
+  blockingFromLog: FailedTestCase[],
+  suiteSummary: TestFailureSummary,
+): void {
+  if (blockingFromLog.length) {
+    for (const f of failures) {
+      f.severity = blockingFromLog.some((b) => testNamesMatch(b.name, f.name))
+        ? 'blocking'
+        : 'informing';
+    }
+    return;
+  }
+  if (suiteSummary.blockingFail != null && suiteSummary.informingFail != null) {
+    if (suiteSummary.informingFail === 0) {
+      for (const f of failures) f.severity = 'blocking';
+    } else if (suiteSummary.blockingFail === 0) {
+      for (const f of failures) f.severity = 'informing';
+    }
+    // Mixed counts without a name list — leave existing severity.
+    return;
+  }
+  // Authoritative summary with no informing/blocking split (e.g. monitor-only) → blocking.
+  for (const f of failures) {
+    if (f.severity === 'unknown') f.severity = 'blocking';
+  }
+}
+
 /**
  * Parse openshift-tests `test-failures-summary*.json` — the post-flake authoritative
  * failure list Sippy / Prow spyglass use (often a single Monitor test on upgrades).
+ * Severity starts unknown; applyLifecycleSeverity() sets blocking vs informing.
  */
 export function parseTestFailuresSummaryJson(
   text: string,
@@ -210,7 +254,7 @@ export function parseTestFailuresSummaryJson(
       suiteTag: extractSuiteTag(name),
       source: 'failures-summary',
       junitFile: null,
-      severity: 'blocking',
+      severity: 'unknown',
     });
   }
   return out;
@@ -413,8 +457,13 @@ export async function collectTestFailures(input: {
   if (fromSummary.length) {
     for (const s of fromSummary) attachJunitMeta(s);
     failures = dedupeFailures(fromSummary);
+    applyLifecycleSeverity(failures, blocking, summary);
+    const nBlock = failures.filter((f) => f.severity === 'blocking').length;
+    const nInfo = failures.filter((f) => f.severity === 'informing').length;
     notes.push(
-      `Using test-failures-summary (${failures.length} authoritative fail(s); raw JUnit may list demoted stability / informing noise).`,
+      `Using test-failures-summary (${failures.length} fail(s)` +
+        (nBlock || nInfo ? `: ${nBlock} blocking, ${nInfo} informing` : '') +
+        ').',
     );
   } else {
     // Prefer blocking-log names as the authoritative product failures; keep junit-only

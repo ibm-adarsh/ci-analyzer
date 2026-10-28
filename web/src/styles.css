@@ -1472,17 +1472,33 @@ select {
   color: var(--value);
   word-break: break-word;
 }
-.dbg-tests-suite-tag {
+.dbg-tests-suite-tag,
+.dbg-tests-sev-tag {
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--accent);
-  background: var(--accent-dim);
   padding: 3px 6px;
   border-radius: 6px;
   white-space: nowrap;
   margin-top: 2px;
+}
+.dbg-tests-suite-tag {
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+.dbg-tests-sev-tag.sev-blocking {
+  color: var(--red);
+  background: var(--red-bg);
+}
+.dbg-tests-sev-tag.sev-informing {
+  color: var(--muted);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+}
+.dbg-tests-sev-tag.sev-unknown {
+  color: var(--accent);
+  background: var(--accent-dim);
 }
 .dbg-tests-links {
   display: flex;

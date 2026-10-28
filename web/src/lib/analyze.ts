@@ -577,20 +577,30 @@ export async function analyzeExecution(
       progressSummary = 'Job is running but the current step could not be inferred.';
     }
   } else if (result === 'FAILED' && firstFailed) {
-    const productFails =
+    const classified =
       testFailures?.failures.filter(
-        (f) =>
-          f.severity === 'blocking' ||
-          (f.severity !== 'informing' && f.suite !== 'monitor'),
+        (f) => f.severity === 'blocking' || f.severity === 'informing',
       ) || [];
+    const productFails = classified.length
+      ? classified
+      : testFailures?.failures.filter(
+          (f) =>
+            f.severity === 'blocking' ||
+            (f.severity !== 'informing' && f.suite !== 'monitor'),
+        ) || [];
     if (productFails.length) {
-      const topSuite = productFails[0]?.suite;
+      const nBlock = productFails.filter((f) => f.severity === 'blocking').length;
+      const nInfo = productFails.filter((f) => f.severity === 'informing').length;
+      const topSuite = productFails.find((f) => f.severity === 'blocking')?.suite
+        || productFails[0]?.suite;
       const topLabel = topSuite
         ? testFailures?.bySuite.find((g) => g.suite === topSuite)?.label
         : null;
-      progressSummary = `Failed at ${firstFailed} — ${productFails.length} failed test case(s)${
-        topLabel ? ` (${topLabel})` : ''
-      }.`;
+      const split =
+        nBlock || nInfo
+          ? ` — ${productFails.length} failed (${nBlock} blocking, ${nInfo} informing)`
+          : ` — ${productFails.length} failed test case(s)${topLabel ? ` (${topLabel})` : ''}`;
+      progressSummary = `Failed at ${firstFailed}${split}.`;
     } else {
       progressSummary = `Failed at ${firstFailed}.`;
     }

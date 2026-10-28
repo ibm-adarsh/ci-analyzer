@@ -67,11 +67,21 @@ function phaseForStepName(name: string | null | undefined): WorkflowPhase | null
 }
 
 /**
- * Product / job-failing tests only.
- * Prefer authoritative blocking rows (incl. Monitor from test-failures-summary);
- * otherwise drop monitor / informing JUnit noise.
+ * Failed tests to show in the debug panel.
+ * Include both blocking and informing when we classified them (matches Prow
+ * "Results for openshift/conformance/…" — e.g. 1 blocking + 5 informing).
+ * Otherwise prefer blocking / non-monitor rows over raw monitor noise.
  */
 function productFailedTests(report: TestFailureReport): FailedTestCase[] {
+  const classified = report.failures.filter(
+    (f) => f.severity === 'blocking' || f.severity === 'informing',
+  );
+  if (classified.length) {
+    return [...classified].sort((a, b) => {
+      if (a.severity !== b.severity) return a.severity === 'blocking' ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  }
   const blocking = report.failures.filter((f) => f.severity === 'blocking');
   if (blocking.length) return blocking;
   return report.failures.filter(
@@ -567,6 +577,9 @@ function TestFailuresPanel({ report }: { report: TestFailureReport }) {
   const failed = productFailedTests(report);
   if (!failed.length) return null;
 
+  const nBlock = failed.filter((f) => f.severity === 'blocking').length;
+  const nInfo = failed.filter((f) => f.severity === 'informing').length;
+
   const linked = new Set(
     failed.map((f) => f.junitFile).filter((n): n is string => Boolean(n)),
   );
@@ -590,11 +603,27 @@ function TestFailuresPanel({ report }: { report: TestFailureReport }) {
             · <code>{report.expectedSuite}</code>
           </>
         ) : null}
+        {nBlock || nInfo ? (
+          <>
+            {' '}
+            · <strong>{nBlock}</strong> blocking
+            {' · '}
+            <strong>{nInfo}</strong> informing
+          </>
+        ) : null}
       </p>
       <ul className="dbg-tests-list">
         {failed.map((t) => (
           <li key={t.name}>
-            <span className="dbg-tests-suite-tag">{t.suiteTag || t.suite}</span>
+            <span
+              className={`dbg-tests-sev-tag sev-${t.severity === 'informing' ? 'informing' : t.severity === 'blocking' ? 'blocking' : 'unknown'}`}
+            >
+              {t.severity === 'informing'
+                ? 'informing'
+                : t.severity === 'blocking'
+                  ? 'blocking'
+                  : t.suiteTag || t.suite}
+            </span>
             <code>{cleanTestName(t.name)}</code>
           </li>
         ))}
