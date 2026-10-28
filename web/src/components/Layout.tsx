@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useState, type ReactNode } from 'react';
+import { BrandMark } from './BrandMark';
 
 export function Layout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
@@ -38,14 +39,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <div className="app-rail topbar-inner">
           <Link to="/" className="brand" aria-label="IBM Z CI Job Debugger home">
             <span className="brand-mark" aria-hidden>
-              <img
-                className="brand-logo"
-                src="/brand-analytics.png"
-                alt=""
-                width={36}
-                height={36}
-                decoding="async"
-              />
+              <BrandMark />
             </span>
             <span className="brand-text">
               <span className="brand-name">
