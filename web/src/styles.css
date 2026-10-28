@@ -20,6 +20,11 @@
   --yellow: #e6c07b;
   --yellow-bg: rgba(230, 192, 123, 0.1);
   --radius: 10px;
+  /* Typography roles:
+   * display — headlines & key numerals (same family as “Pick a workflow…”)
+   * ui      — body, nav, controls, chips (readability)
+   * mono    — code, logs, IDs, URLs
+   */
   --font: 'Manrope', 'Segoe UI', sans-serif;
   --font-display: 'Source Serif 4', Georgia, 'Times New Roman', serif;
   --mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
@@ -88,6 +93,26 @@ button,
 input,
 select {
   font: inherit;
+}
+
+/* Shared display headline rhythm (guide / home / execution). */
+.type-display,
+.home-hero h1,
+.guide-hero h1,
+.guide-overview h2,
+.dbg-hero h1,
+.dbg-focus h2,
+.dbg-section-head h2,
+.dbg-tests h2,
+.dbg-compare h2,
+.dbg-prompt-pass h2,
+.prompt-panel h2,
+.home-recent-h h2,
+.dbg-load h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
 }
 
 .app-frame {
@@ -515,12 +540,8 @@ select {
 .home-hero h1 {
   margin: 0 0 18px;
   max-width: 18em;
-  font-family: var(--font-display);
   font-size: clamp(2.35rem, 4.6vw, 3.5rem);
-  font-weight: 600;
-  letter-spacing: -0.025em;
   line-height: 1.1;
-  color: var(--text);
 }
 .home-hero-line {
   display: block;
@@ -528,14 +549,20 @@ select {
 .home-hero-accent {
   color: var(--accent);
 }
-.home-lead {
-  margin: 0 0 18px;
-  max-width: 42rem;
-  font-size: 1.08rem;
+.home-lead,
+.guide-lead,
+.prompt-lead,
+.dbg-summary {
+  font-family: var(--font);
   font-weight: 500;
   line-height: 1.55;
   color: var(--text2);
   text-wrap: pretty;
+}
+.home-lead {
+  margin: 0 0 18px;
+  max-width: 42rem;
+  font-size: 1.08rem;
 }
 .home-caps {
   list-style: none;
@@ -691,10 +718,8 @@ select {
 }
 .home-recent-h h2 {
   margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.15rem;
-  font-weight: 650;
-  letter-spacing: -0.02em;
+  font-size: 1.2rem;
+  line-height: 1.25;
 }
 .home-recent-h span {
   font-size: 0.75rem;
@@ -848,8 +873,10 @@ select {
 }
 .panel h2 {
   margin: 0 0 8px;
-  font-size: 14px;
-  font-weight: 650;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 .muted {
   color: var(--muted);
@@ -1200,11 +1227,8 @@ select {
 }
 .prompt-panel h2 {
   margin: 0 0 8px;
-  font-family: var(--font-display);
   font-size: clamp(1.35rem, 2.2vw, 1.7rem);
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  color: var(--text);
+  line-height: 1.2;
 }
 .prompt-lead {
   margin: 0;
@@ -1342,7 +1366,8 @@ select {
 }
 .dbg-prompt-pass h2 {
   margin: 0 0 10px;
-  font-size: 1.35rem;
+  font-size: clamp(1.3rem, 2vw, 1.55rem);
+  line-height: 1.25;
 }
 .dbg-prompt-pass-body {
   margin: 0 0 12px;
@@ -1387,6 +1412,11 @@ select {
   border-radius: 16px;
   background: var(--surface);
   border: 1px solid var(--border);
+}
+.dbg-load h2 {
+  margin: 0 0 8px;
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  line-height: 1.25;
 }
 .dbg-kicker {
   margin: 0 0 6px;
@@ -1476,9 +1506,10 @@ select {
   color: var(--muted);
 }
 .dbg-total {
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-weight: 600;
   color: var(--text);
-  font-size: 0.95rem;
+  font-size: 1rem;
   letter-spacing: -0.02em;
   padding: 5px 10px;
   border-radius: 8px;
@@ -1487,13 +1518,9 @@ select {
 }
 .dbg-hero h1 {
   margin: 0 0 10px;
-  font-family: var(--font-display);
-  font-size: clamp(1.25rem, 2.5vw, 1.65rem);
-  font-weight: 650;
-  letter-spacing: -0.025em;
+  font-size: clamp(1.3rem, 2.5vw, 1.7rem);
   line-height: 1.22;
   word-break: break-word;
-  color: var(--text);
   max-width: 48rem;
 }
 .dbg-summary {
@@ -1703,7 +1730,8 @@ select {
 }
 .dbg-compare h2 {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: clamp(1.15rem, 1.8vw, 1.35rem);
+  line-height: 1.25;
 }
 .dbg-compare-lead {
   margin: 0 0 12px;
@@ -1834,12 +1862,8 @@ select {
 }
 .dbg-focus h2 {
   margin: 0 0 10px;
-  font-family: var(--font-display);
   font-size: clamp(1.25rem, 2vw, 1.55rem);
-  font-weight: 650;
-  letter-spacing: -0.025em;
   line-height: 1.25;
-  color: var(--text);
 }
 .dbg-focus h2 code {
   font-size: 0.95em;
@@ -1910,10 +1934,11 @@ select {
 }
 .dbg-tests h2 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: clamp(1.1rem, 1.8vw, 1.3rem);
   display: flex;
   align-items: baseline;
   gap: 10px;
+  line-height: 1.25;
 }
 .dbg-tests-total {
   font-size: 0.8rem;
@@ -2009,10 +2034,8 @@ select {
 }
 .dbg-section-head h2 {
   margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.2rem;
-  font-weight: 650;
-  letter-spacing: -0.02em;
+  font-size: 1.25rem;
+  line-height: 1.25;
 }
 .dbg-section-links {
   display: flex;
@@ -2540,12 +2563,8 @@ select {
 }
 .guide-hero h1 {
   margin: 0 0 8px;
-  font-family: var(--font-display);
   font-size: clamp(1.6rem, 3.2vw, 2.15rem);
-  font-weight: 600;
-  letter-spacing: -0.02em;
   line-height: 1.2;
-  color: var(--text);
 }
 .guide-lead {
   margin: 0;
@@ -2628,9 +2647,8 @@ select {
 }
 .guide-overview h2 {
   margin: 0 0 8px;
-  font-size: 1.25rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: clamp(1.25rem, 2vw, 1.55rem);
+  line-height: 1.25;
 }
 .guide-overview > p {
   margin: 0 0 14px;
