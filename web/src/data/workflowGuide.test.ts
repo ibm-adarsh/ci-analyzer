@@ -9,8 +9,17 @@ describe('workflow guide helpers', () => {
 
   it('detects fips and heterogeneous from job name', () => {
     expect(workflowByJobHints('ocp-fips-ovn-remote-libvirt-multi-z-z').id).toBe('vpn-fips');
-    expect(workflowByJobHints('ocp-e2e-ovn-remote-libvirt-multi-z-xz').id).toBe('hetero');
-    expect(workflowByJobHints('ocp-e2e-ovn-remote-libvirt-multi-z-za').id).toBe('hetero');
+    expect(workflowByJobHints('ocp-e2e-ovn-remote-libvirt-multi-z-za').id).toBe('hetero-vpn');
+    expect(
+      workflowByJobHints(
+        'periodic-ci-openshift-multiarch-main-nightly-5.0-ocp-e2e-ovn-remote-libvirt-multi-z-xz',
+      ).id,
+    ).toBe('hetero-vpn');
+    expect(
+      workflowByJobHints(
+        'periodic-ci-openshift-multiarch-main-nightly-5.1-ocp-e2e-ovn-remote-libvirt-multi-z-xz',
+      ).id,
+    ).toBe('hetero');
   });
 
   it('prefers explicit workflow name', () => {

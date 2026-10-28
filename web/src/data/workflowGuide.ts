@@ -12,7 +12,7 @@ export interface GuideStep {
   /** Maps to openshift-install / cluster lifecycle stage */
   ocpStage: string;
   summary: string;
-  detail: string;
+  detail?: string;
   /** First places a developer should look when this step fails */
   whenFails?: string;
   bestEffort?: boolean;
@@ -317,6 +317,263 @@ function withFips(steps: GuideStep[]): GuideStep[] {
   return out;
 }
 
+/** VPN hetero leaf steps (openshift-e2e-libvirt-heterogeneous-vpn). */
+const HETERO_VPN_LEAF_STEPS: GuideStep[] = [
+  {
+    name: 'upi-libvirt-cleanup-heterogeneous-pre',
+    phase: 'pre',
+    ocpStage: 'Pre-flight · reclaim primary + additional hosts',
+    summary: 'Clean stale domains/networks/volumes on primary Z and additional hypervisor.',
+    detail: 'Walks both hosts for the leased vpn-amd64 / arm64 slot before install.',
+    whenFails: 'Confirm both hosts are reachable; partial cleanup poisons the next run.',
+    stepsCi: stepCi('ref', 'upi-libvirt-cleanup-heterogeneous-pre'),
+    keyArtifacts: ['build-log.txt'],
+  },
+  {
+    name: 'ipi-install-rbac',
+    phase: 'pre',
+    ocpStage: 'CI privileges on build farm',
+    summary: 'Grant CI service account ClusterRoleBindings needed for install steps.',
+    detail: 'Build-farm RBAC only.',
+    via: 'upi-conf-libvirt-heterogeneous',
+    stepsCi: stepCi('ref', 'ipi-install-rbac'),
+  },
+  {
+    name: 'upi-conf-libvirt-heterogeneous',
+    phase: 'pre',
+    ocpStage: 'Install prep · install-config (mixed-arch)',
+    summary: 'Generate install-config for s390x CP + additional amd64/arm64 workers.',
+    detail: 'ADDITIONAL_WORKER_ARCHITECTURE selects amd64 (z-xz) vs arm64 (z-za).',
+    whenFails: 'Diff env against a green hetero sibling; check worker arch and counts.',
+    via: 'upi-conf-libvirt-heterogeneous',
+    stepsCi: stepCi('ref', 'upi-conf-libvirt-heterogeneous'),
+    keyArtifacts: ['build-log.txt'],
+  },
+  {
+    name: 'ipi-conf-debug-kdump-configure-logs',
+    phase: 'pre',
+    ocpStage: 'Install prep · kdump MachineConfig',
+    summary: 'Emit MachineConfig so nodes collect kernel crash dumps.',
+    via: 'upi-conf-libvirt-heterogeneous',
+    stepsCi: stepCi('ref', 'ipi-conf-debug-kdump-configure-logs'),
+  },
+  {
+    name: 'ipi-debug-missing-static-pod-controller-degraded',
+    phase: 'pre',
+    ocpStage: 'Install prep · kubelet watchdog (optional)',
+    summary: 'Optional static-pod restart watchdog; often a no-op.',
+    stepsCi: stepCi('ref', 'ipi-debug-missing-static-pod-controller-degraded'),
+  },
+  {
+    name: 'ipi-conf-etcd-on-ramfs',
+    phase: 'pre',
+    ocpStage: 'Install prep · etcd on ramfs',
+    summary: 'Put etcd on ramfs when disk is slow (typical on Z).',
+    stepsCi: stepCi('ref', 'ipi-conf-etcd-on-ramfs'),
+  },
+  {
+    name: 'upi-install-libvirt-heterogeneous-network',
+    phase: 'pre',
+    ocpStage: 'Infrastructure · networks on both hosts',
+    summary: 'Create libvirt networks on primary Z and additional hypervisor (VXLAN).',
+    detail:
+      'Hard-fails when lease secret lacks vxlan."additional-bridge" (common on incomplete arm64/amd64 slots).',
+    whenFails: 'Inspect lease secret for VXLAN bridge / additional hostname fields.',
+    via: 'upi-install-libvirt-heterogeneous',
+    stepsCi: stepCi('ref', 'upi-install-libvirt-heterogeneous-network'),
+    keyArtifacts: ['build-log.txt'],
+  },
+  {
+    name: 'rhcos-conf-osstream',
+    phase: 'pre',
+    ocpStage: 'Infrastructure · RHCOS image stream',
+    summary: 'Resolve RHCOS OS image stream for BRANCH/ARCH.',
+    via: 'upi-install-libvirt-heterogeneous',
+    stepsCi: stepCi('ref', 'rhcos-conf-osstream'),
+  },
+  {
+    name: 'upi-install-libvirt',
+    phase: 'pre',
+    ocpStage: 'openshift-install · s390x control plane',
+    summary: 'Create the s390x control-plane / compute guests via openshift-install.',
+    detail: 'Primary evidence: .openshift_install.log under this step.',
+    whenFails: 'Open .openshift_install.log; confirm bootstrap and install-complete.',
+    via: 'upi-install-libvirt-heterogeneous',
+    stepsCi: stepCi('ref', 'upi-install-libvirt'),
+    keyArtifacts: ['build-log.txt', '.openshift_install.log'],
+  },
+  {
+    name: 'upi-install-libvirt-heterogeneous',
+    phase: 'pre',
+    ocpStage: 'openshift-install · additional workers',
+    summary: 'Attach amd64 or arm64 additional workers on the secondary hypervisor.',
+    detail: 'Runs after the s390x base install; workers join over VXLAN.',
+    whenFails: 'Confirm additional workers joined and CSRs approved.',
+    via: 'upi-install-libvirt-heterogeneous',
+    stepsCi: stepCi('ref', 'upi-install-libvirt-heterogeneous'),
+    keyArtifacts: ['build-log.txt'],
+  },
+  {
+    name: 'openshift-e2e-libvirt-conf',
+    phase: 'test',
+    ocpStage: 'Post-install · ready for tests',
+    summary: 'Validate kubeconfig / provider settings before openshift-tests.',
+    stepsCi: stepCi('ref', 'openshift-e2e-libvirt-conf'),
+  },
+  {
+    name: 'openshift-e2e-libvirt-test',
+    phase: 'test',
+    ocpStage: 'Conformance on mixed-arch cluster',
+    summary: 'Run openshift-tests against the heterogeneous cluster.',
+    whenFails: 'Separate arch-specific worker failures from control-plane failures.',
+    stepsCi: stepCi('ref', 'openshift-e2e-libvirt-test'),
+    keyArtifacts: ['build-log.txt', 'junit*.xml', 'e2e.log'],
+  },
+  {
+    name: 'ipi-conf-debug-kdump-gather-logs',
+    phase: 'post',
+    ocpStage: 'Debug · gather kdump',
+    summary: 'Collect kdump logs when configured (best-effort).',
+    bestEffort: true,
+    stepsCi: stepCi('ref', 'ipi-conf-debug-kdump-gather-logs'),
+  },
+  {
+    name: 'gather-must-gather',
+    phase: 'post',
+    ocpStage: 'Debug · must-gather',
+    summary: 'Standard must-gather (best-effort).',
+    bestEffort: true,
+    via: 'gather',
+    stepsCi: stepCi('ref', 'gather-must-gather'),
+    keyArtifacts: ['must-gather.tar'],
+  },
+  {
+    name: 'gather-extra',
+    phase: 'post',
+    ocpStage: 'Debug · extra gather',
+    summary: 'Extra debug artifacts when the cluster is unhealthy (best-effort).',
+    bestEffort: true,
+    via: 'gather',
+    stepsCi: stepCi('ref', 'gather-extra'),
+  },
+  {
+    name: 'gather-audit-logs',
+    phase: 'post',
+    ocpStage: 'Debug · audit logs',
+    summary: 'Collect audit logs (best-effort).',
+    bestEffort: true,
+    via: 'gather',
+    stepsCi: stepCi('ref', 'gather-audit-logs'),
+  },
+  {
+    name: 'upi-libvirt-cleanup-heterogeneous-post',
+    phase: 'post',
+    ocpStage: 'Deprovision · both hypervisors',
+    summary: 'Tear down domains/networks/volumes on primary and additional hosts.',
+    whenFails: 'Manual virsh cleanup on both hosts if the next job fails at cleanup-pre.',
+    stepsCi: stepCi('ref', 'upi-libvirt-cleanup-heterogeneous-post'),
+    keyArtifacts: ['build-log.txt'],
+  },
+];
+
+/** Classical UPI hetero leaf steps. */
+const UPI_HETERO_LEAF_STEPS: GuideStep[] = [
+  {
+    name: 'upi-libvirt-conf',
+    phase: 'pre',
+    ocpStage: 'Install prep · UPI conf',
+    summary: 'Configure classical UPI libvirt manifests for mixed-arch.',
+    detail: 'Part of upi-libvirt-heterogeneous-pre; uses sshd-bastion path.',
+    via: 'upi-libvirt-heterogeneous-pre',
+    stepsCi: stepCi('ref', 'upi-libvirt-conf'),
+    keyArtifacts: ['build-log.txt'],
+  },
+  {
+    name: 'ipi-conf-etcd-on-ramfs',
+    phase: 'pre',
+    ocpStage: 'Install prep · etcd on ramfs',
+    summary: 'Put etcd on ramfs when disk is slow.',
+    via: 'upi-libvirt-heterogeneous-pre',
+    stepsCi: stepCi('ref', 'ipi-conf-etcd-on-ramfs'),
+  },
+  {
+    name: 'ipi-install-rbac',
+    phase: 'pre',
+    ocpStage: 'CI privileges',
+    summary: 'Build-farm RBAC for install steps.',
+    via: 'upi-libvirt-install',
+    stepsCi: stepCi('ref', 'ipi-install-rbac'),
+  },
+  {
+    name: 'upi-libvirt-install-install',
+    phase: 'pre',
+    ocpStage: 'openshift-install · base cluster',
+    summary: 'Install the s390x base cluster via remote libvirt tunnel.',
+    via: 'upi-libvirt-install',
+    stepsCi: stepCi('ref', 'upi-libvirt-install-install'),
+    keyArtifacts: ['build-log.txt', '.openshift_install.log'],
+  },
+  {
+    name: 'upi-libvirt-install-heterogeneous',
+    phase: 'pre',
+    ocpStage: 'openshift-install · additional workers',
+    summary: 'Attach additional-architecture workers after the base install.',
+    stepsCi: stepCi('ref', 'upi-libvirt-install-heterogeneous'),
+    keyArtifacts: ['build-log.txt'],
+  },
+  {
+    name: 'openshift-e2e-libvirt-conf',
+    phase: 'test',
+    ocpStage: 'Post-install · ready for tests',
+    summary: 'Validate kubeconfig before openshift-tests.',
+    stepsCi: stepCi('ref', 'openshift-e2e-libvirt-conf'),
+  },
+  {
+    name: 'openshift-e2e-libvirt-test',
+    phase: 'test',
+    ocpStage: 'Conformance',
+    summary: 'Run openshift-tests on the heterogeneous cluster.',
+    stepsCi: stepCi('ref', 'openshift-e2e-libvirt-test'),
+    keyArtifacts: ['build-log.txt', 'junit*.xml', 'e2e.log'],
+  },
+  {
+    name: 'gather-must-gather',
+    phase: 'post',
+    ocpStage: 'Debug · must-gather',
+    summary: 'Standard must-gather (best-effort).',
+    bestEffort: true,
+    via: 'gather',
+    stepsCi: stepCi('ref', 'gather-must-gather'),
+  },
+  {
+    name: 'gather-extra',
+    phase: 'post',
+    ocpStage: 'Debug · extra gather',
+    summary: 'Extra debug artifacts (best-effort).',
+    bestEffort: true,
+    via: 'gather',
+    stepsCi: stepCi('ref', 'gather-extra'),
+  },
+  {
+    name: 'gather-audit-logs',
+    phase: 'post',
+    ocpStage: 'Debug · audit logs',
+    summary: 'Collect audit logs (best-effort).',
+    bestEffort: true,
+    via: 'gather',
+    stepsCi: stepCi('ref', 'gather-audit-logs'),
+  },
+  {
+    name: 'upi-libvirt-deprovision',
+    phase: 'post',
+    ocpStage: 'Deprovision',
+    summary: 'Tear down the classical UPI libvirt cluster.',
+    stepsCi: stepCi('ref', 'upi-libvirt-deprovision'),
+    keyArtifacts: ['build-log.txt'],
+  },
+];
+
+
 export const GUIDE_WORKFLOWS: GuideWorkflow[] = [
   {
     id: 'vpn',
@@ -355,118 +612,35 @@ export const GUIDE_WORKFLOWS: GuideWorkflow[] = [
     steps: VPN_LEAF_STEPS,
   },
   {
+    id: 'hetero-vpn',
+    name: 'openshift-e2e-libvirt-heterogeneous-vpn',
+    title: 'Heterogeneous VPN (z-xz on 5.0 · z-za)',
+    summary:
+      'Lease-aware VPN hetero: s390x control plane plus amd64 or arm64 workers on lnxocp11 carve-outs (vpn-amd64 / arm64 leases with VXLAN).',
+    since: '5.0+',
+    profiles: ['libvirt-s390x-vpn-amd64', 'libvirt-s390x-vpn-arm64'],
+    stepsCi: stepCi('workflow', 'openshift-e2e-libvirt-heterogeneous-vpn'),
+    releaseYaml: `${RELEASE}/ci-operator/step-registry/openshift/e2e/libvirt/heterogeneous/vpn/openshift-e2e-libvirt-heterogeneous-vpn-workflow.yaml`,
+    steps: HETERO_VPN_LEAF_STEPS,
+  },
+  {
     id: 'hetero',
     name: 'openshift-e2e-libvirt-upi-heterogeneous',
-    title: 'Heterogeneous libvirt (z-xz / z-za)',
+    title: 'Heterogeneous UPI (classical z-xz)',
     summary:
-      'Mixed-arch path: s390x control plane plus additional workers (amd64 z-xz, or arm64 z-za). Leaf dirs under GCS often use *-heterogeneous-* names; this debugger aliases them onto the VPN leaf names.',
+      'Classical UPI / sshd-bastion hetero used for multi-z-xz on 4.22–4.23 and 5.1 (profile libvirt-s390x-amd64). Different leaf names than the VPN hetero path.',
     since: '4.15+',
-    profiles: ['libvirt-s390x-amd64', 'libvirt-s390x-vpn-arm64'],
+    profiles: ['libvirt-s390x-amd64'],
     stepsCi: stepCi('workflow', 'openshift-e2e-libvirt-upi-heterogeneous'),
     releaseYaml: `${RELEASE}/ci-operator/step-registry/openshift/e2e/libvirt/upi/heterogeneous/openshift-e2e-libvirt-upi-heterogeneous-workflow.yaml`,
-    steps: [
-      {
-        name: 'upi-libvirt-cleanup-heterogeneous-pre',
-        phase: 'pre',
-        ocpStage: 'Pre-flight · reclaim primary + additional hosts',
-        summary: 'Clean stale domains/networks/volumes on primary and additional hypervisors for the lease.',
-        detail:
-          'Heterogeneous cleanup walks both LPARs. Alias of upi-libvirt-cleanup-pre in the debugger UI.',
-        whenFails:
-          'Confirm both hosts are reachable. Partial cleanup leaves the next install with stale volumes.',
-        stepsCi: stepCi('ref', 'upi-libvirt-cleanup-heterogeneous-pre'),
-        keyArtifacts: ['build-log.txt'],
-      },
-      {
-        name: 'upi-conf-libvirt-heterogeneous-network',
-        phase: 'pre',
-        ocpStage: 'Install prep · dual-host network manifests',
-        summary: 'Write network config for primary + additional-arch bridge/VXLAN.',
-        detail:
-          'Needs lease fields for both hypervisors. Missing vxlan."additional-bridge" fails later at install-network.',
-        whenFails: 'Inspect the Boskos lease secret for the arm64/amd64 additional host fields.',
-        stepsCi: stepCi('ref', 'upi-conf-libvirt-heterogeneous-network'),
-        keyArtifacts: ['build-log.txt'],
-      },
-      {
-        name: 'upi-conf-libvirt-heterogeneous',
-        phase: 'pre',
-        ocpStage: 'Install prep · install-config (mixed-arch)',
-        summary: 'Generate install-config for s390x control plane + additional workers.',
-        detail: 'ADDITIONAL_WORKER_ARCHITECTURE / counts drive z-xz vs z-za topology.',
-        stepsCi: stepCi('ref', 'upi-conf-libvirt-heterogeneous'),
-        keyArtifacts: ['build-log.txt'],
-      },
-      {
-        name: 'upi-install-libvirt-heterogeneous-network',
-        phase: 'pre',
-        ocpStage: 'Infrastructure · create networks on both hosts',
-        summary: 'Create libvirt networks on primary and additional hypervisors.',
-        detail:
-          'Hard-fails with ERROR: Couldn\'t find \'vxlan."additional-bridge"\' when the lease secret is incomplete (seen on libvirt-s390x-arm64-* slots).',
-        whenFails:
-          'Fix the lease config for additional-bridge / VXLAN, or pick a known-good arm64/amd64 lease slot.',
-        stepsCi: stepCi('ref', 'upi-install-libvirt-heterogeneous-network'),
-        keyArtifacts: ['build-log.txt'],
-      },
-      {
-        name: 'upi-install-libvirt-heterogeneous',
-        phase: 'pre',
-        ocpStage: 'openshift-install · base + additional workers',
-        summary: 'Install the s390x cluster, then attach additional-architecture workers.',
-        detail:
-          'Two-stage infra: primary install then mixed-arch workers. Primary evidence still .openshift_install.log.',
-        whenFails: 'Open .openshift_install.log; confirm additional workers joined and CSRs approved.',
-        stepsCi: stepCi('ref', 'upi-install-libvirt-heterogeneous'),
-        keyArtifacts: ['build-log.txt', '.openshift_install.log'],
-      },
-      {
-        name: 'openshift-e2e-libvirt-conf',
-        phase: 'test',
-        ocpStage: 'Post-install · cluster ready for tests',
-        summary: 'Validate kubeconfig / provider settings before openshift-tests.',
-        detail: 'Same conf leaf as homogeneous VPN jobs.',
-        stepsCi: stepCi('ref', 'openshift-e2e-libvirt-conf'),
-      },
-      {
-        name: 'openshift-e2e-libvirt-test',
-        phase: 'test',
-        ocpStage: 'Conformance on mixed-arch cluster',
-        summary: 'Run openshift-tests against the heterogeneous cluster.',
-        detail: 'JUnit + e2e.log remain the source of truth.',
-        whenFails: 'Check whether failures are arch-specific (workers) vs control-plane.',
-        stepsCi: stepCi('ref', 'openshift-e2e-libvirt-test'),
-        keyArtifacts: ['build-log.txt', 'junit*.xml', 'e2e.log'],
-      },
-      {
-        name: 'gather-must-gather',
-        phase: 'post',
-        ocpStage: 'Debug · oc adm must-gather',
-        summary: 'Standard must-gather (best-effort).',
-        detail:
-          'Same gather leaf as homogeneous jobs. Prefer gather-extra if the mixed-arch cluster is too unhealthy for oc adm must-gather.',
-        bestEffort: true,
-        stepsCi: stepCi('ref', 'gather-must-gather'),
-        keyArtifacts: ['must-gather.tar.gz'],
-      },
-      {
-        name: 'upi-libvirt-cleanup-heterogeneous-post',
-        phase: 'post',
-        ocpStage: 'Deprovision · both hypervisors',
-        summary: 'Tear down domains/networks/volumes on primary and additional hosts.',
-        detail: 'Failed post-cleanup poisons the next z-xz / z-za job on the same lease.',
-        whenFails: 'Manual virsh cleanup on both LPARs if the slot keeps failing pre-cleanup.',
-        stepsCi: stepCi('ref', 'upi-libvirt-cleanup-heterogeneous-post'),
-        keyArtifacts: ['build-log.txt'],
-      },
-    ],
+    steps: UPI_HETERO_LEAF_STEPS,
   },
   {
     id: 'ibmcloud',
     name: 'openshift-e2e-ibmcloud-heterogeneous',
     title: 'IBM Cloud multi-arch (s390x)',
     summary:
-      'Not libvirt-on-LPAR: IBM Cloud bare-metal / VPC style multi-arch jobs using profile ibmcloud-multi-s390x. Listed for completeness alongside libvirt Z CI.',
+      'Not libvirt-on-LPAR: IBM Cloud bare-metal / VPC multi-arch jobs (profile ibmcloud-multi-s390x). Listed for completeness.',
     since: '4.14+',
     profiles: ['ibmcloud-multi-s390x'],
     stepsCi: stepCi('workflow', 'openshift-e2e-ibmcloud-heterogeneous'),
@@ -478,7 +652,7 @@ export const GUIDE_WORKFLOWS: GuideWorkflow[] = [
         ocpStage: 'Cloud provision (not libvirt VPN)',
         summary: 'Provision via IBM Cloud steps — different artifact tree than libvirt-vpn.',
         detail:
-          'Use this debugger’s libvirt-focused views only for libvirt-* profiles. For ibmcloud jobs, start from Prow artifacts and the ibmcloud workflow docs on steps.ci.',
+          'Use this debugger’s libvirt views for libvirt-* profiles. For ibmcloud jobs, start from Prow artifacts and the ibmcloud workflow on steps.ci.',
       },
     ],
   },
@@ -503,22 +677,38 @@ export const CLUSTER_PROFILES: ClusterProfileInfo[] = [
     status: 'primary',
   },
   {
+    id: 'libvirt-s390x-vpn-oz',
+    title: 'libvirt-s390x-vpn-oz',
+    summary: 'OZ lab VPN profile (lnxocp11–14). Same VPN workflow family as YZ.',
+    usage: 'Boskos oz leases; some slots carved out for hetero amd64/arm64 and HCP.',
+    connectivity: 'Prow → VPN → OZ LPAR qemu+tcp.',
+    typicalJobs: ['operator jobs on vpn-oz', 'shared with hetero carve-outs on lnxocp11'],
+    status: 'specialized',
+  },
+  {
+    id: 'libvirt-s390x-vpn-amd64',
+    title: 'libvirt-s390x-vpn-amd64',
+    summary: 'VPN hetero: s390x CP + amd64 workers (lnxocp11 + xkvmocp08, VXLAN).',
+    usage: '5.0 multi-z-xz with openshift-e2e-libvirt-heterogeneous-vpn.',
+    connectivity: 'Primary Z LPAR + x86 HV over VPN VXLAN (ocp1-amd / ocp3-amd).',
+    typicalJobs: ['ocp-e2e-ovn-remote-libvirt-multi-z-xz (5.0)'],
+    status: 'specialized',
+  },
+  {
     id: 'libvirt-s390x-amd64',
     title: 'libvirt-s390x-amd64',
-    summary: 'Heterogeneous topology: s390x + amd64 workers (z-xz jobs).',
-    usage:
-      'Used with openshift-e2e-libvirt-upi-heterogeneous. Often enables USE_RAMFS=true and sshd-bastion capability.',
+    summary: 'Classical UPI hetero: s390x + amd64 workers (z-xz on 4.22/4.23/5.1).',
+    usage: 'Used with openshift-e2e-libvirt-upi-heterogeneous and sshd-bastion.',
     connectivity: 'Libvirt across arches; bastion/sshd for cross-arch access.',
-    typicalJobs: ['ocp-e2e-ovn-remote-libvirt-multi-z-xz'],
+    typicalJobs: ['ocp-e2e-ovn-remote-libvirt-multi-z-xz (5.1)'],
     status: 'specialized',
   },
   {
     id: 'libvirt-s390x-vpn-arm64',
     title: 'libvirt-s390x-vpn-arm64',
-    summary: 'Heterogeneous topology: s390x + arm64 workers (z-za jobs).',
-    usage:
-      'Leases look like libvirt-s390x-arm64-*-*. Requires vxlan."additional-bridge" in the lease secret for the additional hypervisor.',
-    connectivity: 'Primary Z LPAR + additional arm64 libvirt host over VPN/bastion.',
+    summary: 'VPN hetero: s390x CP + arm64 workers (lnxocp11 + akvmocp03, VXLAN ocp2-arm).',
+    usage: 'multi-z-za with openshift-e2e-libvirt-heterogeneous-vpn. Lease libvirt-s390x-arm64-0-0.',
+    connectivity: 'Primary Z LPAR + arm64 HV over VPN/bastion.',
     typicalJobs: ['ocp-e2e-ovn-remote-libvirt-multi-z-za'],
     status: 'specialized',
   },
@@ -838,7 +1028,10 @@ export function workflowByName(name: string | null | undefined): GuideWorkflow {
 export function workflowByJobHints(jobName: string, workflow?: string | null): GuideWorkflow {
   if (workflow) return workflowByName(workflow);
   if (/fips/i.test(jobName)) return workflowByName('vpn-fips');
-  if (/z-xz|z-za|heterogeneous/i.test(jobName)) return workflowByName('hetero');
+  if (/z-za/i.test(jobName) || (/z-xz/i.test(jobName) && /nightly-5\.0/.test(jobName))) {
+    return workflowByName('hetero-vpn');
+  }
+  if (/z-xz|heterogeneous/i.test(jobName)) return workflowByName('hetero');
   if (/ibmcloud/i.test(jobName)) return workflowByName('ibmcloud');
   if (/external-ibmz-upi|libvirt-upi/i.test(jobName) && !/vpn/i.test(jobName)) {
     return workflowByName('upi');
