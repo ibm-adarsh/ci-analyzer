@@ -266,12 +266,16 @@ export function ExecutionPage() {
       <header className={`dbg-hero tone-${tone}`}>
         <div className="dbg-hero-main">
           <div className="dbg-hero-top">
-            <StatusBadge status={a.result} />
-            <span className="dbg-build mono">{a.buildId}</span>
-            <span className="dbg-total mono">{dur}</span>
+            <div className="dbg-hero-status">
+              <StatusBadge status={a.result} />
+              <span className="dbg-build mono">{a.buildId}</span>
+            </div>
+            <span className="dbg-total mono" title="Wall-clock duration">
+              {dur}
+            </span>
           </div>
           <h1 title={a.jobName}>{shortJob(a.jobName)}</h1>
-          <p className="dbg-summary">{a.progressSummary}</p>
+          {a.progressSummary ? <p className="dbg-summary">{a.progressSummary}</p> : null}
           <div className="dbg-facets" aria-label="Job characteristics">
             {facets.map((f) => (
               <div key={f.id} className={`dbg-facet tone-${f.tone || 'default'}`}>
