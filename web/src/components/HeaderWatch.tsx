@@ -44,10 +44,10 @@ export function HeaderWatch() {
     <div className="header-watch" aria-live="off" title={`${parts.date} · ${parts.tz}`}>
       <span className="header-watch-greeting">{parts.greeting}</span>
       <span className="header-watch-time">
-        <span className="header-watch-clock mono">{parts.time}</span>
+        <span className="header-watch-clock">{parts.time}</span>
         {parts.tz ? <span className="header-watch-tz">{parts.tz}</span> : null}
       </span>
-      <span className="header-watch-date mono">{parts.date}</span>
+      <span className="header-watch-date">{parts.date}</span>
     </div>
   );
 }
