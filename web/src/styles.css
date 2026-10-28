@@ -129,16 +129,206 @@ select {
     radial-gradient(720px 180px at 8% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
     color-mix(in srgb, var(--bg) 92%, transparent);
   backdrop-filter: blur(14px);
+  overflow: hidden;
 }
 .app-frame:not(.is-home) .topbar {
   border-bottom-color: var(--border);
 }
 .topbar-inner {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 20px;
   min-height: 64px;
   padding-block: 12px;
+}
+
+/* Technical header motion: log scan + PRE/TEST/POST pulse + trace ticks */
+.topbar-signal {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+.topbar-signal-scan {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 28%;
+  left: -30%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--accent) 0%, transparent) 18%,
+    color-mix(in srgb, var(--accent) 10%, transparent) 50%,
+    color-mix(in srgb, var(--accent) 0%, transparent) 82%,
+    transparent 100%
+  );
+  animation: topbar-scan 7.5s ease-in-out infinite;
+}
+.topbar-signal-rail {
+  position: absolute;
+  right: max(12px, calc((100% - var(--shell-max)) / 2 + var(--rail-pad)));
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0.55;
+}
+@media (min-width: 1100px) {
+  .topbar-signal-rail {
+    display: inline-flex;
+  }
+  /* Keep clear of nav buttons */
+  .topbar-signal-rail {
+    right: max(160px, calc((100% - var(--shell-max)) / 2 + var(--rail-pad) + 168px));
+  }
+}
+.topbar-signal-step {
+  opacity: 0.35;
+  animation: topbar-phase 4.8s ease-in-out infinite;
+}
+.topbar-signal-step.is-pre {
+  animation-delay: 0s;
+}
+.topbar-signal-step.is-test {
+  animation-delay: 1.6s;
+}
+.topbar-signal-step.is-post {
+  animation-delay: 3.2s;
+}
+.topbar-signal-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.35;
+}
+.topbar-signal-pipe {
+  margin-left: 6px;
+  opacity: 0.4;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  font-weight: 500;
+  max-width: 220px;
+  overflow: hidden;
+  white-space: nowrap;
+  border-right: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  animation: topbar-type 9s steps(28, end) infinite;
+}
+.topbar-signal-trace {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  display: flex;
+  gap: 0;
+  opacity: 0.7;
+}
+.topbar-signal-trace span {
+  flex: 1;
+  height: 100%;
+  background: transparent;
+  transform-origin: left center;
+  animation: topbar-trace 3.6s ease-in-out infinite;
+}
+.topbar-signal-trace span:nth-child(1) {
+  animation-delay: 0s;
+}
+.topbar-signal-trace span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.topbar-signal-trace span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+.topbar-signal-trace span:nth-child(4) {
+  animation-delay: 0.6s;
+}
+.topbar-signal-trace span:nth-child(5) {
+  animation-delay: 0.8s;
+}
+.topbar-signal-trace span:nth-child(6) {
+  animation-delay: 1s;
+}
+.topbar-signal-trace span:nth-child(7) {
+  animation-delay: 1.2s;
+}
+.topbar-signal-trace span:nth-child(8) {
+  animation-delay: 1.4s;
+}
+
+@keyframes topbar-scan {
+  0% {
+    left: -32%;
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    left: 104%;
+    opacity: 0;
+  }
+}
+@keyframes topbar-phase {
+  0%,
+  100% {
+    opacity: 0.3;
+    color: var(--muted);
+  }
+  35%,
+  55% {
+    opacity: 1;
+    color: var(--accent);
+  }
+}
+@keyframes topbar-type {
+  0%,
+  8% {
+    max-width: 0;
+    opacity: 0.2;
+  }
+  35%,
+  70% {
+    max-width: 220px;
+    opacity: 0.55;
+  }
+  92%,
+  100% {
+    max-width: 0;
+    opacity: 0.15;
+  }
+}
+@keyframes topbar-trace {
+  0%,
+  100% {
+    background: color-mix(in srgb, var(--border) 80%, transparent);
+    transform: scaleX(0.15);
+    opacity: 0.25;
+  }
+  40% {
+    background: color-mix(in srgb, var(--accent) 70%, transparent);
+    transform: scaleX(1);
+    opacity: 0.85;
+  }
+  70% {
+    background: color-mix(in srgb, var(--green) 55%, transparent);
+    transform: scaleX(0.55);
+    opacity: 0.5;
+  }
 }
 .brand {
   display: flex;
@@ -178,6 +368,85 @@ select {
   height: 100%;
   display: block;
   overflow: visible;
+}
+.brand-bar {
+  transform-box: fill-box;
+  transform-origin: bottom center;
+  animation: brand-bar-pulse 2.8s ease-in-out infinite;
+}
+.brand-bar.b1 {
+  animation-delay: 0s;
+}
+.brand-bar.b2 {
+  animation-delay: 0.18s;
+}
+.brand-bar.b3 {
+  animation-delay: 0.36s;
+}
+.brand-bar.b4 {
+  animation-delay: 0.54s;
+}
+.brand-bar.b5 {
+  animation-delay: 0.72s;
+}
+.brand-lens {
+  animation: brand-lens-pulse 3.4s ease-in-out infinite;
+}
+.brand-lens-glint {
+  animation: brand-glint 3.4s ease-in-out infinite;
+}
+@keyframes brand-bar-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scaleY(0.88);
+  }
+  45% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+@keyframes brand-lens-pulse {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes brand-glint {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar-signal-scan,
+  .topbar-signal-step,
+  .topbar-signal-pipe,
+  .topbar-signal-trace span,
+  .brand-bar,
+  .brand-lens,
+  .brand-lens-glint {
+    animation: none !important;
+  }
+  .topbar-signal-step {
+    opacity: 0.55;
+  }
+  .topbar-signal-pipe {
+    max-width: 220px;
+    opacity: 0.4;
+    border-right: none;
+  }
+  .brand-bar {
+    opacity: 1;
+    transform: none;
+  }
 }
 .brand-text {
   display: flex;
@@ -325,14 +594,12 @@ select {
 }
 .home-lead {
   margin: 0 0 28px;
-  max-width: 38rem;
-  font-size: 1.05rem;
+  max-width: 36rem;
+  font-size: 1.02rem;
   font-weight: 500;
-  line-height: 1.45;
+  line-height: 1.55;
   color: var(--text2);
-}
-.home-lead-line {
-  display: block;
+  text-wrap: pretty;
 }
 .home-paste {
   max-width: 720px;

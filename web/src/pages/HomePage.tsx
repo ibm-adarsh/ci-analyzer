@@ -84,11 +84,8 @@ export function HomePage() {
           <span className="home-hero-line home-hero-accent">Get the debug path.</span>
         </h1>
         <p className="home-lead">
-          <span className="home-lead-line">
-            Failed tests, PRE → TEST → POST timing, logs, and release context for IBM Z
-            libvirt jobs —
-          </span>
-          <span className="home-lead-line">without hunting through GCS by hand.</span>
+          See failed tests, PRE → TEST → POST timing, logs, and release context for IBM&nbsp;Z
+          libvirt jobs—without digging through GCS.
         </p>
 
         <div className="home-paste">

@@ -24,14 +24,15 @@ export function BrandMark() {
         strokeLinecap="round"
         opacity="0.55"
       />
-      {/* Ascending bars */}
-      <rect x="11" y="29" width="4.2" height="9.5" rx="1.2" fill="url(#brandBar)" />
-      <rect x="17.5" y="24" width="4.2" height="14.5" rx="1.2" fill="url(#brandBar)" />
-      <rect x="24" y="18.5" width="4.2" height="20" rx="1.2" fill="url(#brandBar)" />
-      <rect x="30.5" y="13" width="4.2" height="25.5" rx="1.2" fill="url(#brandBar)" />
-      <rect x="37" y="9" width="4.2" height="29.5" rx="1.2" fill="url(#brandBar)" />
-      {/* Magnifier */}
+      {/* Ascending bars — staggered pulse = job metrics being read */}
+      <rect className="brand-bar b1" x="11" y="29" width="4.2" height="9.5" rx="1.2" fill="url(#brandBar)" />
+      <rect className="brand-bar b2" x="17.5" y="24" width="4.2" height="14.5" rx="1.2" fill="url(#brandBar)" />
+      <rect className="brand-bar b3" x="24" y="18.5" width="4.2" height="20" rx="1.2" fill="url(#brandBar)" />
+      <rect className="brand-bar b4" x="30.5" y="13" width="4.2" height="25.5" rx="1.2" fill="url(#brandBar)" />
+      <rect className="brand-bar b5" x="37" y="9" width="4.2" height="29.5" rx="1.2" fill="url(#brandBar)" />
+      {/* Magnifier + soft scan sweep */}
       <circle
+        className="brand-lens"
         cx="20.5"
         cy="20.5"
         r="9.2"
@@ -46,8 +47,8 @@ export function BrandMark() {
         strokeWidth="3.4"
         strokeLinecap="round"
       />
-      {/* Lens highlight */}
       <path
+        className="brand-lens-glint"
         d="M15.2 17.2c1.4-2.2 3.8-3.4 6.2-3.2"
         fill="none"
         stroke="currentColor"
