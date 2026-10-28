@@ -1,12 +1,15 @@
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { HomePage } from './pages/HomePage';
 import { ExecutionPage } from './pages/ExecutionPage';
 import { WorkflowGuidePage } from './pages/WorkflowGuidePage';
 
+/** Vite `base` is `/ci-analyzer/`; BrowserRouter wants no trailing slash. */
+const basename = (import.meta.env.BASE_URL || '/').replace(/\/$/, '') || '/';
+
 export default function App() {
   return (
-    <HashRouter>
+    <BrowserRouter basename={basename}>
       <Layout>
         <Routes>
           <Route path="/" element={<HomePage />} />
@@ -15,6 +18,6 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>
-    </HashRouter>
+    </BrowserRouter>
   );
 }

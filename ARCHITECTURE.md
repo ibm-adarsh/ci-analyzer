@@ -18,7 +18,7 @@ flowchart LR
 
 | Layer | What it is |
 |-------|------------|
-| **UI** | `HashRouter` SPA under `/ci-analyzer/#/...` |
+| **UI** | `BrowserRouter` SPA under `/ci-analyzer/...` (GitHub Pages `404.html` = `index.html`) |
 | **Orchestrator** | `analyzeExecution()` in `web/src/lib/analyze.ts` |
 | **I/O** | `web/src/lib/gcs.ts` → GCS JSON API (CORS-safe) |
 | **Knowledge** | `web/src/data/*` baked from openshift/release (not fetched at runtime) |
@@ -30,8 +30,8 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-  Home["#/ HomePage<br/>paste Prow URL"] -->|parseProwUrl| Exec["#/execution/:bucket/:path<br/>ExecutionPage"]
-  Home --> Guide["#/guide<br/>WorkflowGuidePage"]
+  Home["/ HomePage<br/>paste Prow URL"] -->|parseProwUrl| Exec["/execution/:bucket/:path<br/>ExecutionPage"]
+  Home --> Guide["/guide<br/>WorkflowGuidePage"]
   Exec --> Tabs[Debug · AI prompt · Guide tab]
   Exec -.->|optional| Compare[compareToLastGreen<br/>sibling builds]
 ```
@@ -165,7 +165,7 @@ flowchart LR
   Build --> Pages[GitHub Pages · web/dist]
 ```
 
-- `HashRouter` avoids needing a Pages 404 rewrite for deep links.
+- `BrowserRouter` + post-build `404.html` (copy of `index.html`) so deep links work on GitHub Pages.
 - Theme + recent jobs stay in `localStorage` only.
 
 ---

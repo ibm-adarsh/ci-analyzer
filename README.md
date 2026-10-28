@@ -58,7 +58,7 @@ Settings → Pages → Source = **GitHub Actions**.
 
 ## Workflow guide
 
-Open **Workflow guide** in the app header (or `#/guide`), or the third tab on a job page. Content is curated from a local clone of [openshift/release](https://github.com/openshift/release) (kept under `.cache/release`, gitignored):
+Open **Workflow guide** in the app header (or `/guide`), or the third tab on a job page. Content is curated from a local clone of [openshift/release](https://github.com/openshift/release) (kept under `.cache/release`, gitignored):
 
 ```bash
 git clone --filter=blob:none --depth 1 https://github.com/openshift/release.git .cache/release
