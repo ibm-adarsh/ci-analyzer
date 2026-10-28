@@ -1,12 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { analyzeExecution, type DebugAnalysis, type WorkflowStepView } from '../lib/analyze';
-import {
-  buildAgentPrompt,
-  buildGoogleAiModeQuery,
-  buildGoogleAskBrief,
-  googleAiModeAskUrl,
-} from '../lib/agentPrompt';
+import { buildAgentPrompt } from '../lib/agentPrompt';
 import {
   compareToLastGreen,
   type GreenCompareResult,
@@ -1000,11 +995,8 @@ function JobDetailsPanel({
 
 function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
   const [copied, setCopied] = useState(false);
-  const [askNote, setAskNote] = useState<string | null>(null);
   const passed = a.result === 'PASSED';
   const prompt = useMemo(() => (passed ? '' : buildAgentPrompt(a)), [a, passed]);
-  const googleBrief = useMemo(() => (passed ? '' : buildGoogleAskBrief(a)), [a, passed]);
-  const googleQuery = useMemo(() => (passed ? '' : buildGoogleAiModeQuery(a)), [a, passed]);
 
   if (passed) {
     const short = shortJob(a.jobName);
@@ -1032,89 +1024,76 @@ function AgentPromptPanel({ a }: { a: DebugAnalysis }) {
     );
   }
 
-  async function writeClipboard(text: string): Promise<boolean> {
+  async function copy() {
     try {
-      await navigator.clipboard.writeText(text);
-      return true;
+      await navigator.clipboard.writeText(prompt);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
     } catch {
       try {
         const ta = document.createElement('textarea');
-        ta.value = text;
+        ta.value = prompt;
         document.body.appendChild(ta);
         ta.select();
         document.execCommand('copy');
         document.body.removeChild(ta);
-        return true;
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 2000);
       } catch {
-        return false;
+        /* ignore */
       }
     }
   }
 
-  async function copy() {
-    const ok = await writeClipboard(prompt);
-    if (!ok) return;
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
-  }
-
-  async function askGoogleAi() {
-    // Prefer AI Mode (udm=50): works without AI Studio, which many Workspace orgs disable.
-    const ok = await writeClipboard(prompt);
-    const url = googleAiModeAskUrl(googleQuery || googleBrief);
-    window.open(url, '_blank', 'noopener,noreferrer');
-    setAskNote(
-      ok
-        ? 'Opened Google AI Mode with a short failure query. Full agent prompt is on the clipboard — use “Paste in Gemini” if AI Mode is thin or CAPTCHA’d.'
-        : 'Opened Google AI Mode with a short failure query. Clipboard copy failed — use Copy prompt for the full brief.',
-    );
-    window.setTimeout(() => setAskNote(null), 12000);
-  }
-
-  async function pasteInGemini() {
-    const ok = await writeClipboard(prompt);
-    window.open('https://gemini.google.com/app', '_blank', 'noopener,noreferrer');
-    setAskNote(
-      ok
-        ? 'Opened Gemini and copied the full prompt. Click the chat box and paste (⌘V / Ctrl+V), then send. Use a personal/guest Google login if Workspace blocks Gemini.'
-        : 'Opened Gemini, but clipboard copy failed — use Copy prompt, then paste manually.',
-    );
-    window.setTimeout(() => setAskNote(null), 12000);
-  }
+  const failedStep = a.firstFailed || a.workflow.find((w) => w.status === 'failed')?.name;
+  const failedTestCount = a.testFailures?.failures?.length ?? 0;
 
   return (
-    <section className="panel">
-      <h2>AI agent prompt</h2>
-      <p className="muted">
-        Copy into IBM BOB or any agent. Job context, workflow status, failed-step artifact URLs,
-        phase timings, and the last 80 lines of each failed step log.
-      </p>
-      <div className="prompt-toolbar">
-        <div className="prompt-toolbar-actions">
-          <button type="button" className="btn btn-primary" onClick={() => void askGoogleAi()}>
-            Ask Google AI
-          </button>
-          <button type="button" className="btn" onClick={() => void pasteInGemini()}>
-            Paste in Gemini
-          </button>
-          <button type="button" className="btn" onClick={() => void copy()}>
-            {copied ? 'Copied ✓' : 'Copy prompt'}
-          </button>
+    <section className="panel prompt-panel" aria-label="AI agent prompt">
+      <div className="prompt-hero">
+        <div className="prompt-hero-copy">
+          <p className="prompt-kicker">Ready for IBM BOB</p>
+          <h2>Failure analysis prompt</h2>
+          <p className="prompt-lead">
+            One clipboard-ready brief for IBM BOB or any agent: job context, workflow status,
+            failed-step artifact URLs, phase timings, and the last 80 lines of each failed step
+            log.
+          </p>
         </div>
+        <button
+          type="button"
+          className={`btn btn-primary prompt-copy ${copied ? 'is-copied' : ''}`}
+          onClick={() => void copy()}
+        >
+          {copied ? 'Copied' : 'Copy prompt'}
+        </button>
       </div>
-      {askNote && <p className="prompt-ask-note">{askNote}</p>}
-      <p className="muted prompt-ask-hint">
-        Ask Google AI uses Search AI Mode (no API key, no AI Studio — Workspace often blocks Studio).
-        Paste in Gemini opens gemini.google.com with the full prompt already copied for one paste.
-      </p>
-      <pre className="prompt-box" tabIndex={0}>
-        {prompt}
-      </pre>
-      <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
-        ~{prompt.length.toLocaleString()} characters · AI Mode query ~
-        {(googleQuery || googleBrief).length.toLocaleString()} chars
-        {googleBrief ? ` · paste brief ~${googleBrief.length.toLocaleString()}` : ''}.
-      </p>
+
+      <ul className="prompt-chips" aria-label="Prompt contents">
+        <li>Job + release</li>
+        <li>PRE → TEST → POST</li>
+        {failedStep ? <li className="is-warn">Failed: {failedStep}</li> : <li>Workflow status</li>}
+        {failedTestCount > 0 ? (
+          <li className="is-warn">
+            {failedTestCount} failed test{failedTestCount === 1 ? '' : 's'}
+          </li>
+        ) : (
+          <li>Diagnosis facts</li>
+        )}
+        <li>Log tails</li>
+        <li>Artifact URLs</li>
+      </ul>
+
+      <div className="prompt-frame">
+        <div className="prompt-frame-bar">
+          <span className="prompt-frame-dot" aria-hidden />
+          <span className="prompt-frame-label">Plain-text brief</span>
+          <span className="prompt-frame-meta mono">~{prompt.length.toLocaleString()} chars</span>
+        </div>
+        <pre className="prompt-box" tabIndex={0}>
+          {prompt}
+        </pre>
+      </div>
     </section>
   );
 }

@@ -13,7 +13,6 @@ flowchart LR
   User([Engineer]) -->|paste Prow URL| App[IBM Z Job Debugger<br/>Vite SPA on GitHub Pages]
   App -->|HTTPS fetch JSON API ?alt=media| GCS[(Public GCS<br/>test-platform-results-public)]
   App -.->|links only| Prow[Prow deck<br/>prow.ci.openshift.org]
-  App -->|optional open / paste| Gemini[Google AI Mode / Gemini]
   App --- Static[Bundled KB<br/>vpnWorkflow · LPAR · step hints]
 ```
 
@@ -136,7 +135,7 @@ flowchart TB
 | `lib/junit.ts` | Failed tests; blocking vs informing |
 | `lib/diagnosis.ts` | Facts / hypotheses / evidence |
 | `lib/compare.ts` / `jobHistory.ts` | Diff vs last green build |
-| `lib/agentPrompt.ts` | IBM BOB brief + Google AI Mode / Gemini helpers |
+| `lib/agentPrompt.ts` | Copy-paste failure brief for IBM BOB / any agent |
 | `data/vpnWorkflow.ts` | Configured PRE/TEST/POST leaves |
 | `data/lpar.ts` / `stepInfo.ts` / `workflowGuide.ts` | Static Z CI knowledge |
 
@@ -150,7 +149,7 @@ flowchart LR
   DA --> Timeline[PRE → TEST → POST timings]
   DA --> Steps[Workflow steps + log tails + key artifacts]
   DA --> Diag[Diagnosis panel]
-  DA --> Prompt[AI agent prompt<br/>Copy · Ask Google AI · Paste in Gemini]
+  DA --> Prompt[AI agent prompt<br/>Copy-ready IBM BOB brief]
   DA --> GuideTab[In-job workflow guide]
 ```
 
