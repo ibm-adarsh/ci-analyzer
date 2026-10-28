@@ -11,9 +11,7 @@ export type LparInfo = {
   tcpPort?: number;
   /** Heterogeneous additional hypervisor (x86 / arm) when applicable */
   hostnameAdditional?: string;
-  subnet?: number | string;
   vxlanBridge?: string;
-  httpd?: string;
   notes?: string;
   /** true when hostname came from step logs (leases secret), not the static map */
   observed?: boolean;
@@ -24,7 +22,6 @@ export type LeaseRecord = {
   slot: string;
   lpar: string;
   hostname: string;
-  subnet: number | string;
   pool: string;
   profile: string;
   zone: 'YZ' | 'OZ';
@@ -33,7 +30,6 @@ export type LeaseRecord = {
   /** Heterogeneous secondary hypervisor */
   hostnameAdditional?: string;
   vxlanBridge?: string;
-  httpd?: string;
   workerArch?: 'amd64' | 'arm64';
 };
 
@@ -48,6 +44,7 @@ function host(lpar: string): string {
  * Prefer step-log qemu URI when present; this map is the offline fallback.
  *
  * YZ (vpn): lnxocp01/02/04 · OZ (vpn-oz): lnxocp11–14 · hetero carve-outs on lnxocp11.
+ * No private IPs / subnet numbers — only hostnames and lease slots.
  */
 export const LEASE_CATALOG: LeaseRecord[] = [
   // ── lnxocp01 · libvirt-s390x-0-* · YZ vpn ──
@@ -55,7 +52,6 @@ export const LEASE_CATALOG: LeaseRecord[] = [
     slot: `libvirt-s390x-0-${n}`,
     lpar: 'lnxocp01',
     hostname: host('lnxocp01'),
-    subnet: n === 0 ? 126 : n,
     pool: 'libvirt-s390x-vpn-quota-slice',
     profile: 'libvirt-s390x-vpn',
     zone: 'YZ' as const,
@@ -67,7 +63,6 @@ export const LEASE_CATALOG: LeaseRecord[] = [
     slot: `libvirt-s390x-1-${n}`,
     lpar: 'lnxocp02',
     hostname: host('lnxocp02'),
-    subnet: n === 0 ? 126 : n,
     pool: 'libvirt-s390x-vpn-quota-slice',
     profile: 'libvirt-s390x-vpn',
     zone: 'YZ' as const,
@@ -79,7 +74,6 @@ export const LEASE_CATALOG: LeaseRecord[] = [
     slot: `libvirt-s390x-2-${n}`,
     lpar: 'lnxocp04',
     hostname: host('lnxocp04'),
-    subnet: n === 0 ? 126 : n,
     pool: 'libvirt-s390x-vpn-quota-slice',
     profile: 'libvirt-s390x-vpn',
     zone: 'YZ' as const,
@@ -91,7 +85,6 @@ export const LEASE_CATALOG: LeaseRecord[] = [
     slot: 'libvirt-s390x-oz-0-0',
     lpar: 'lnxocp11',
     hostname: host('lnxocp11'),
-    subnet: 126,
     pool: 'libvirt-s390x-vpn-oz-quota-slice',
     profile: 'libvirt-s390x-vpn-oz',
     zone: 'OZ',
@@ -102,13 +95,11 @@ export const LEASE_CATALOG: LeaseRecord[] = [
     lpar: 'lnxocp11',
     hostname: host('lnxocp11'),
     hostnameAdditional: host('xkvmocp08'),
-    subnet: 1,
     pool: 'libvirt-s390x-vpn-amd64-quota-slice',
     profile: 'libvirt-s390x-vpn-amd64',
     zone: 'OZ',
     tcpPort: 16509,
     vxlanBridge: 'ocp1-amd',
-    httpd: '192.168.1.1:8080',
     workerArch: 'amd64',
     notes: 'vpn-amd64 · VXLAN ocp1-amd · workers on xkvmocp08',
   },
@@ -117,13 +108,11 @@ export const LEASE_CATALOG: LeaseRecord[] = [
     lpar: 'lnxocp11',
     hostname: host('lnxocp11'),
     hostnameAdditional: host('akvmocp03'),
-    subnet: 2,
     pool: 'libvirt-s390x-vpn-arm64-quota-slice',
     profile: 'libvirt-s390x-vpn-arm64',
     zone: 'OZ',
     tcpPort: 16509,
     vxlanBridge: 'ocp2-arm',
-    httpd: '192.168.2.1:8080',
     workerArch: 'arm64',
     notes: 'arm64 · VXLAN ocp2-arm · workers on akvmocp03',
   },
@@ -132,13 +121,11 @@ export const LEASE_CATALOG: LeaseRecord[] = [
     lpar: 'lnxocp11',
     hostname: host('lnxocp11'),
     hostnameAdditional: host('xkvmocp08'),
-    subnet: 3,
     pool: 'libvirt-s390x-vpn-amd64-quota-slice',
     profile: 'libvirt-s390x-vpn-amd64',
     zone: 'OZ',
     tcpPort: 16509,
     vxlanBridge: 'ocp3-amd',
-    httpd: '192.168.3.1:8080',
     workerArch: 'amd64',
     notes: 'vpn-amd64 · VXLAN ocp3-amd · workers on xkvmocp08',
   },
@@ -148,7 +135,6 @@ export const LEASE_CATALOG: LeaseRecord[] = [
     slot: `libvirt-s390x-oz-1-${n}`,
     lpar: 'lnxocp12',
     hostname: host('lnxocp12'),
-    subnet: n === 0 ? 126 : n,
     pool: 'libvirt-s390x-vpn-oz-quota-slice',
     profile: 'libvirt-s390x-vpn-oz',
     zone: 'OZ' as const,
@@ -160,7 +146,6 @@ export const LEASE_CATALOG: LeaseRecord[] = [
     slot: `libvirt-s390x-oz-2-${n}`,
     lpar: 'lnxocp13',
     hostname: host('lnxocp13'),
-    subnet: n === 0 ? 126 : n,
     pool: 'libvirt-s390x-vpn-oz-quota-slice',
     profile: 'libvirt-s390x-vpn-oz',
     zone: 'OZ' as const,
@@ -172,7 +157,6 @@ export const LEASE_CATALOG: LeaseRecord[] = [
     slot: `libvirt-s390x-oz-3-${n}`,
     lpar: 'lnxocp14',
     hostname: host('lnxocp14'),
-    subnet: n === 0 ? 126 : n,
     pool: 'libvirt-s390x-vpn-oz-quota-slice',
     profile: 'libvirt-s390x-vpn-oz',
     zone: 'OZ' as const,
@@ -267,9 +251,7 @@ export function leaseRecordToLpar(rec: LeaseRecord, slotNum?: number): LparInfo 
     tcpPort: rec.tcpPort || 16509,
     qemuUri: `qemu+tcp://${rec.hostname}/system`,
     hostnameAdditional: rec.hostnameAdditional,
-    subnet: rec.subnet,
     vxlanBridge: rec.vxlanBridge,
-    httpd: rec.httpd,
     notes: rec.notes,
     observed: false,
   };

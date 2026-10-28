@@ -289,9 +289,6 @@ export function ExecutionPage() {
               {lpar.vxlanBridge ? (
                 <em className="dbg-lease-note">VXLAN {lpar.vxlanBridge}</em>
               ) : null}
-              {lpar.subnet != null ? (
-                <em className="dbg-lease-note">subnet {lpar.subnet}</em>
-              ) : null}
               {!lpar.observed ? <em className="muted">inferred</em> : null}
             </div>
           ) : null}
@@ -829,19 +826,11 @@ function JobDetailsPanel({
                     ) : null}
                     {lpar?.hostnameAdditional ? (
                       <div className="dbg-fact-meta">
-                        Additional HV: <code>{lpar.hostnameAdditional}</code>
+                        Additional HV: <code>{lpar.hostnameAdditional.split('.')[0]}</code>
                       </div>
                     ) : null}
-                    {lpar?.vxlanBridge || lpar?.subnet != null || lpar?.httpd ? (
-                      <div className="dbg-fact-meta">
-                        {[
-                          lpar.vxlanBridge ? `VXLAN ${lpar.vxlanBridge}` : null,
-                          lpar.subnet != null ? `subnet ${lpar.subnet}` : null,
-                          lpar.httpd ? `httpd ${lpar.httpd}` : null,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </div>
+                    {lpar?.vxlanBridge ? (
+                      <div className="dbg-fact-meta">VXLAN {lpar.vxlanBridge}</div>
                     ) : null}
                   </dd>
                 </div>

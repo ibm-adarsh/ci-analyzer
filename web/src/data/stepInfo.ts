@@ -27,7 +27,7 @@ export const STEP_INFO: Record<string, StepInfo> = {
     desc: 'Generates network.xml for libvirt virtual network. INSTALLER_TYPE=agent uses agent-based layout.',
     hints: [
       { t:'<strong>INSTALLER_TYPE=agent</strong> → agent-based network config. Default is UPI-style.', cls:'info' },
-      { t:'<strong>USE_EXTERNAL_DNS=true</strong> → cluster uses external DNS on LPAR subnet (not in-cluster CoreDNS).', cls:'info' },
+      { t:'<strong>USE_EXTERNAL_DNS=true</strong> → cluster uses external DNS on the LPAR (not in-cluster CoreDNS).', cls:'info' },
       { t:'Output written to <code>$SHARED_DIR/network.xml</code> — consumed by upi-install-libvirt-network.', cls:'info' },
     ],
     keyFiles: ['upi-conf-libvirt-network/build-log.txt'],
