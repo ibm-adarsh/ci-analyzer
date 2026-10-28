@@ -9,4 +9,4 @@ npm test
 npm run build
 ```
 
-See [../README.md](../README.md) and [ARCHITECTURE.md](./ARCHITECTURE.md).
+See [../README.md](../README.md) and [../ARCHITECTURE.md](../ARCHITECTURE.md).

@@ -19,9 +19,9 @@ flowchart LR
 | Layer | What it is |
 |-------|------------|
 | **UI** | `HashRouter` SPA under `/ci-analyzer/#/...` |
-| **Orchestrator** | `analyzeExecution()` in `src/lib/analyze.ts` |
-| **I/O** | `src/lib/gcs.ts` → GCS JSON API (CORS-safe) |
-| **Knowledge** | `src/data/*` baked from openshift/release (not fetched at runtime) |
+| **Orchestrator** | `analyzeExecution()` in `web/src/lib/analyze.ts` |
+| **I/O** | `web/src/lib/gcs.ts` → GCS JSON API (CORS-safe) |
+| **Knowledge** | `web/src/data/*` baked from openshift/release (not fetched at runtime) |
 | **Deploy** | `.github/workflows/pages.yml` → `web/dist` |
 
 ---
@@ -118,14 +118,14 @@ flowchart TB
   TF --> OUT
 ```
 
-**Configured vs observed:** leaf steps from `data/vpnWorkflow.ts` (openshift-e2e-libvirt-vpn family) are matched to GCS dirs. On a RUNNING job, missing dirs are **pending/current**, not success.
+**Configured vs observed:** leaf steps from `web/src/data/vpnWorkflow.ts` (openshift-e2e-libvirt-vpn family) are matched to GCS dirs. On a RUNNING job, missing dirs are **pending/current**, not success.
 
 ---
 
 ## Module map
 
-| Module | Responsibility |
-|--------|----------------|
+| Module (under `web/src/`) | Responsibility |
+|---------------------------|----------------|
 | `lib/url.ts` | Prow URL ↔ route encoding |
 | `lib/gcs.ts` | CORS-safe fetch/list |
 | `lib/analyze.ts` | End-to-end orchestration → `DebugAnalysis` |

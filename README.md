@@ -73,6 +73,14 @@ Legacy zero-dep HTML (optional): `tools/prow-job-analyzer/legacy.html`.
 
 ---
 
+## Architecture
+
+High-level data flow, GCS fetch map, and module layout (with diagrams):
+
+→ **[ARCHITECTURE.md](ARCHITECTURE.md)**
+
+---
+
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE)
