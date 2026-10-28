@@ -111,6 +111,23 @@ export function parseClusterProfileFromProwLog(prowLog: string | null): string |
   return m?.[1] || null;
 }
 
+/** Short host label only — never keep internal DNS FQDNs on LeaseInfo. */
+function shortHostLabel(host: string | null | undefined): string | null {
+  if (!host) return null;
+  const bare = host.trim().split('/')[0]?.split(':')[0];
+  if (!bare) return null;
+  return bare.split('.')[0] || bare;
+}
+
+function redactQemuUri(uri: string | null | undefined): string | null {
+  if (!uri) return null;
+  return uri.replace(
+    /^(qemu\+tcp:\/\/)([^/:]+)(.*)$/i,
+    (_m, scheme: string, host: string, rest: string) =>
+      `${scheme}${shortHostLabel(host) || host}${rest || '/system'}`,
+  );
+}
+
 export function extractLeaseInfo(
   prowLog: string | null,
   steps: Record<string, Pick<StepResult, 'logTail' | 'logText'> | undefined>,
@@ -125,8 +142,8 @@ export function extractLeaseInfo(
     slot,
     pool: fromProw?.pool || null,
     source: fromProw ? 'ci-operator build-log.txt' : fromSteps!.source,
-    hostname: conn?.hostname || null,
-    qemuUri: conn?.qemuUri || null,
+    hostname: shortHostLabel(conn?.hostname),
+    qemuUri: redactQemuUri(conn?.qemuUri),
     connectionSource: conn?.source || null,
   };
 }

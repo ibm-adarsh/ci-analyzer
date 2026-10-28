@@ -111,8 +111,8 @@ function sample(partial?: Partial<DebugAnalysis>): DebugAnalysis {
       slot: 'libvirt-s390x-0-1',
       pool: 'libvirt-s390x-vpn-quota-slice',
       source: 'ci-operator build-log.txt',
-      hostname: 'lnxocp01.example.test',
-      qemuUri: 'qemu+tcp://lnxocp01.example.test/system',
+      hostname: 'lnxocp01',
+      qemuUri: 'qemu+tcp://lnxocp01/system',
       connectionSource: 'upi-libvirt-cleanup-pre/build-log.txt',
     },
     progressSummary: 'Failed at upi-install-libvirt',
@@ -177,6 +177,5 @@ describe('buildAgentPrompt', () => {
     expect(prompt).not.toContain('**');
     expect(prompt).toContain('What I need from you');
     expect(prompt).toContain('qemu+tcp://lnxocp01/system');
-    expect(prompt).not.toContain('example.test');
   });
 });

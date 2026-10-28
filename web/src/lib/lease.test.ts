@@ -103,7 +103,9 @@ Imported release 4.14.0-0.nightly-2026-09-30-024514 created at 2026-09-30 02:46:
 
     const lease = extractLeaseInfo(SAMPLE_PROW, steps);
     expect(lease?.slot).toBe('libvirt-s390x-2-3');
-    expect(lease?.hostname).toBe('lnxocp04.example.test');
+    // LeaseInfo always stores short host — never internal FQDNs.
+    expect(lease?.hostname).toBe('lnxocp04');
+    expect(lease?.qemuUri).toBe('qemu+tcp://lnxocp04/system');
 
     const lpar = resolveLpar(lease!.slot, lease);
     expect(lpar?.lpar).toBe('lnxocp04');
