@@ -61,6 +61,14 @@ export function Layout({ children }: { children: ReactNode }) {
             <Link to="/guide" className={onGuide ? 'nav-link on' : 'nav-link'}>
               Guide
             </Link>
+            <a
+              href="https://ibm-adarsh.github.io/ibmz-openshift-job-monitor/"
+              className="nav-link"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Job Monitor
+            </a>
             <button
               type="button"
               className="nav-theme"
