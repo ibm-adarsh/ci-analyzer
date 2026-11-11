@@ -189,6 +189,12 @@ export function testNamesMatch(a: string, b: string): boolean {
  * Mark summary/JUnit failures as blocking vs informing using the build-log
  * "Blocking test failures" list, JUnit `lifecycle` properties, and the
  * "N blocking fail, M informing fail" suite line.
+ *
+ * Important: the blocking-log list only names the e2e suite blockers. Sippy /
+ * Prow spyglass still report other post-flake failures (esp. monitors under
+ * "Results for variants") as failed+blocking when informingFail is 0. Only
+ * demote the rest to informing when the suite summary actually counts informing
+ * failures (classic conformance: 1 blocking + N informing).
  */
 export function applyLifecycleSeverity(
   failures: FailedTestCase[],
@@ -196,10 +202,17 @@ export function applyLifecycleSeverity(
   suiteSummary: TestFailureSummary,
 ): void {
   if (blockingFromLog.length) {
+    const demoteRestToInforming = (suiteSummary.informingFail ?? 0) > 0;
     for (const f of failures) {
-      f.severity = blockingFromLog.some((b) => testNamesMatch(b.name, f.name))
-        ? 'blocking'
-        : 'informing';
+      if (blockingFromLog.some((b) => testNamesMatch(b.name, f.name))) {
+        f.severity = 'blocking';
+      } else if (demoteRestToInforming) {
+        f.severity = 'informing';
+      } else if (f.severity === 'unknown') {
+        // Matches Prow: variants monitor fails stay "failed" + "blocking".
+        f.severity = 'blocking';
+      }
+      // Keep explicit JUnit lifecycle (blocking/informing) when not demoting.
     }
     return;
   }
@@ -420,6 +433,30 @@ async function listTestFailuresSummaryNames(
 }
 
 /**
+ * Pick Sippy summary files that match Prow spyglass panels:
+ * - always keep `*_monitor_*` (Results for variants)
+ * - prefer product summaries that share a timestamp with `junit_e2e__*`
+ *   (Results for all), so nested `junit_upgrade` summaries are not double-counted
+ * - if no e2e stamp match, keep every non-monitor summary
+ */
+export function selectTestFailuresSummaryFiles(
+  summaryNames: string[],
+  junitNames: string[],
+): string[] {
+  const monitor = summaryNames.filter((n) => /_monitor_/i.test(n));
+  const product = summaryNames.filter((n) => !/_monitor_/i.test(n));
+  if (!product.length) return [...monitor];
+
+  const e2eStamps = junitNames
+    .map((n) => n.match(/^junit_e2e__(\d{8}-\d{6})/i)?.[1])
+    .filter((s): s is string => Boolean(s));
+  if (!e2eStamps.length) return [...product, ...monitor];
+
+  const matched = product.filter((n) => e2eStamps.some((s) => n.includes(s)));
+  return [...(matched.length ? matched : product), ...monitor];
+}
+
+/**
  * Build a failing-test report for openshift-e2e-libvirt-test (or similar) when
  * the TEST phase failed.
  */
@@ -457,7 +494,10 @@ export async function collectTestFailures(input: {
 
   // Authoritative post-flake list (Sippy / spyglass). Prefer over raw JUnit noise.
   const fromSummary: FailedTestCase[] = [];
-  const summaryNames = await listTestFailuresSummaryNames(input.bucket, junitPrefix);
+  const summaryNames = selectTestFailuresSummaryFiles(
+    await listTestFailuresSummaryNames(input.bucket, junitPrefix),
+    junitNames,
+  );
   for (const name of summaryNames) {
     const url = `${input.stepBase.replace(/\/+$/, '')}/artifacts/junit/${name}`;
     try {
@@ -502,11 +542,16 @@ export async function collectTestFailures(input: {
 
   let failures: FailedTestCase[];
 
-  /** Non-monitor JUnit fails not already covered by `base` (skip stability wrappers). */
+  /**
+   * Non-monitor JUnit fails not already covered by `base`.
+   * Skip stability wrappers and nested junit_upgrade rows (those are folded into
+   * the parent ClusterUpgrade failure in Prow "Results for all").
+   */
   const junitProductExtras = (base: FailedTestCase[]) =>
     fromXml.filter(
       (f) =>
         f.suite !== 'monitor' &&
+        !/junit_upgrade/i.test(f.junitFile || '') &&
         !isStabilityWrapperTest(f.name) &&
         !base.some((b) => testNamesMatch(b.name, f.name)),
     );

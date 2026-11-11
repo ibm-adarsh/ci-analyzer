@@ -11,6 +11,7 @@ import {
   applyLifecycleSeverity,
   parseSuiteRunSummary,
   parseTestFailuresSummaryJson,
+  selectTestFailuresSummaryFiles,
   testNamesMatch,
 } from './junit';
 
@@ -230,5 +231,67 @@ describe('junit suite classification', () => {
     expect(fails.filter((f) => f.severity === 'blocking')).toHaveLength(1);
     expect(fails.filter((f) => f.severity === 'informing')).toHaveLength(2);
     expect(fails.find((f) => f.severity === 'blocking')?.name).toContain('API LBs follow /readyz');
+  });
+
+  it('selects e2e+monitor Sippy summaries (skips nested junit_upgrade stamp)', () => {
+    expect(
+      selectTestFailuresSummaryFiles(
+        [
+          'test-failures-summary_20261110-170114.json',
+          'test-failures-summary_20261110-200034.json',
+          'test-failures-summary_monitor_20261110-170114.json',
+        ],
+        [
+          'junit_e2e__20261110-170114.xml',
+          'junit_upgrade__20261110-200034.xml',
+          'e2e-monitor-tests__20261110-170114.xml',
+        ],
+      ).sort(),
+    ).toEqual([
+      'test-failures-summary_20261110-170114.json',
+      'test-failures-summary_monitor_20261110-170114.json',
+    ]);
+  });
+
+  it('keeps Sippy/monitor summary fails as blocking when suite has 0 informing', () => {
+    // Upgrade jobs: build-log names 2 e2e blockers, but spyglass "Results for
+    // variants" still shows post-flake monitor fails as failed+blocking.
+    const blockingName =
+      '[sig-arch][Feature:ClusterUpgrade] Cluster should remain functional during upgrade [Disruptive] [Serial]';
+    const fails = parseTestFailuresSummaryJson(
+      JSON.stringify({
+        Tests: [
+          { Test: { Name: blockingName } },
+          {
+            Test: {
+              Name: '[Monitor:audit-log-analyzer][sig-api-machinery] API LBs follow /readyz',
+            },
+            Suite: { Name: 'openshift-tests-upgrade' },
+          },
+          {
+            Test: {
+              Name: '[Monitor:cluster-version-checker][bz-Routing] clusteroperator/ingress must complete version change',
+            },
+          },
+        ],
+      }),
+      'upgrade',
+    );
+    applyLifecycleSeverity(
+      fails,
+      [
+        {
+          name: blockingName,
+          suite: 'upgrade',
+          suiteTag: null,
+          source: 'blocking-log',
+          junitFile: null,
+          severity: 'blocking',
+        },
+      ],
+      { blockingFail: 2, informingFail: 0, pass: 29, skip: 4 },
+    );
+    expect(fails.every((f) => f.severity === 'blocking')).toBe(true);
+    expect(fails).toHaveLength(3);
   });
 });
