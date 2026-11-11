@@ -532,14 +532,14 @@ export async function collectTestFailures(input: {
 
     const productExtras = junitProductExtras(blocking);
     const monitorOnly =
-      !blocking.length &&
-      !productExtras.length &&
-      fromXml.filter((f) => f.suite === 'monitor');
+      !blocking.length && !productExtras.length
+        ? fromXml.filter((f) => f.suite === 'monitor')
+        : [];
 
     failures = dedupeFailures([
       ...blocking,
       ...productExtras,
-      ...(monitorOnly.length ? monitorOnly : []),
+      ...monitorOnly,
     ]);
 
     applyLifecycleSeverity(failures, blocking, summary);
