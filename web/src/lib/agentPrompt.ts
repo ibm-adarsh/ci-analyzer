@@ -2,6 +2,7 @@ import type { DebugAnalysis } from './analyze';
 import type { WorkflowStepView } from './analyze';
 import { WORKFLOW_DOCS, WORKFLOW_SOURCE } from '../data/vpnWorkflow';
 import { fmtDur } from './gcs';
+import { listFailedTestsForDisplay } from './junit';
 
 const TAIL_LINES = 80;
 
@@ -124,22 +125,26 @@ export function buildAgentPrompt(a: DebugAnalysis): string {
 
   if (a.testFailures && a.testFailures.failures.length) {
     const tf = a.testFailures;
-    const product = tf.failures.filter(
-      (f) =>
-        f.severity === 'blocking' ||
-        (f.severity !== 'informing' && f.suite !== 'monitor'),
-    );
-    const cases = product.length ? product : tf.failures.filter((f) => f.suite !== 'monitor');
+    const cases = listFailedTestsForDisplay(tf);
     if (cases.length) {
       lines.push(section('Failed test cases'));
       const s = tf.summary;
       if (s.blockingFail != null) {
         lines.push(`Blocking failures (suite summary): ${s.blockingFail}`);
       }
-      lines.push(`Failed test cases: ${cases.length}`);
+      const nBlock = cases.filter((t) => t.severity === 'blocking').length;
+      const nInfo = cases.filter((t) => t.severity === 'informing').length;
+      lines.push(
+        `Failed test cases: ${cases.length}` +
+          (nBlock || nInfo ? ` (${nBlock} blocking, ${nInfo} informing)` : ''),
+      );
       for (const t of cases.slice(0, 40)) {
+        const sev =
+          t.severity === 'blocking' || t.severity === 'informing'
+            ? ` [${t.severity}]`
+            : '';
         lines.push(
-          `  - ${t.name.replace(/\s*\[Suite:[^\]]+\]/g, '').trim()}${
+          `  -${sev} ${t.name.replace(/\s*\[Suite:[^\]]+\]/g, '').trim()}${
             t.suiteTag ? ` (Suite:${t.suiteTag})` : ''
           }`,
         );

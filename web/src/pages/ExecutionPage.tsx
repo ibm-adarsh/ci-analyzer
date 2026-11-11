@@ -23,7 +23,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { WorkflowGuideView } from '../components/WorkflowGuideView';
 import { resolveLpar } from '../lib/lparResolve';
 import { buildJobFacets } from '../lib/jobFacets';
-import type { FailedTestCase, TestFailureReport } from '../lib/junit';
+import { listFailedTestsForDisplay, type TestFailureReport } from '../lib/junit';
 
 /** Map observed GCS / hetero step name onto the workflow leaf used for UI ids. */
 function workflowStepKey(name: string | null | undefined): string | null {
@@ -64,29 +64,6 @@ function phaseForStepName(name: string | null | undefined): WorkflowPhase | null
   if (/test|e2e/i.test(name)) return 'test';
   if (/install|conf|cleanup-pre|fips|deprovision/i.test(name)) return 'pre';
   return null;
-}
-
-/**
- * Failed tests to show in the debug panel.
- * Include both blocking and informing when we classified them (matches Prow
- * "Results for openshift/conformance/…" — e.g. 1 blocking + 5 informing).
- * Otherwise prefer blocking / non-monitor rows over raw monitor noise.
- */
-function productFailedTests(report: TestFailureReport): FailedTestCase[] {
-  const classified = report.failures.filter(
-    (f) => f.severity === 'blocking' || f.severity === 'informing',
-  );
-  if (classified.length) {
-    return [...classified].sort((a, b) => {
-      if (a.severity !== b.severity) return a.severity === 'blocking' ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-  }
-  const blocking = report.failures.filter((f) => f.severity === 'blocking');
-  if (blocking.length) return blocking;
-  return report.failures.filter(
-    (f) => f.suite !== 'monitor' && f.severity !== 'informing',
-  );
 }
 
 function cleanTestName(name: string): string {
@@ -578,7 +555,7 @@ function FailureFocusBanner({
 }
 
 function TestFailuresPanel({ report }: { report: TestFailureReport }) {
-  const failed = productFailedTests(report);
+  const failed = listFailedTestsForDisplay(report);
   if (!failed.length) return null;
 
   const nBlock = failed.filter((f) => f.severity === 'blocking').length;

@@ -19,7 +19,11 @@ import {
   enrichMetaFromProwLog,
   parseJobMeta,
 } from './meta';
-import { collectTestFailures, type TestFailureReport } from './junit';
+import {
+  collectTestFailures,
+  listFailedTestsForDisplay,
+  type TestFailureReport,
+} from './junit';
 import {
   fetchReleaseFromArtifacts,
   mergeReleaseInfo,
@@ -523,12 +527,7 @@ export async function analyzeExecution(
       expectedSuite: meta.testType,
     });
     if (testFailures?.failures.length) {
-      const product = testFailures.failures.filter(
-        (f) =>
-          f.severity === 'blocking' ||
-          (f.severity !== 'informing' && f.suite !== 'monitor'),
-      );
-      const productOrAll = product.length ? product : testFailures.failures;
+      const productOrAll = listFailedTestsForDisplay(testFailures);
       const productSuites = new Set(productOrAll.map((f) => f.suite));
       const bySuite = testFailures.bySuite.filter((g) => productSuites.has(g.suite));
       const suites = bySuite.map((g) => `${g.count} ${g.label}`).join(', ');
@@ -536,9 +535,7 @@ export async function analyzeExecution(
         `Failed test cases: ${productOrAll.length}${suites ? ` (${suites})` : ''}`,
       );
       for (const g of bySuite.slice(0, 4)) {
-        const cases = g.tests.filter(
-          (t) => t.severity === 'blocking' || t.severity !== 'informing',
-        );
+        const cases = g.tests;
         if (!cases.length) continue;
         diagnosis.hypotheses.push({
           tag: g.suite,
@@ -577,17 +574,9 @@ export async function analyzeExecution(
       progressSummary = 'Job is running but the current step could not be inferred.';
     }
   } else if (result === 'FAILED' && firstFailed) {
-    const classified =
-      testFailures?.failures.filter(
-        (f) => f.severity === 'blocking' || f.severity === 'informing',
-      ) || [];
-    const productFails = classified.length
-      ? classified
-      : testFailures?.failures.filter(
-          (f) =>
-            f.severity === 'blocking' ||
-            (f.severity !== 'informing' && f.suite !== 'monitor'),
-        ) || [];
+    const productFails = testFailures
+      ? listFailedTestsForDisplay(testFailures)
+      : [];
     if (productFails.length) {
       const nBlock = productFails.filter((f) => f.severity === 'blocking').length;
       const nInfo = productFails.filter((f) => f.severity === 'informing').length;

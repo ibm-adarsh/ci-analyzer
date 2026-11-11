@@ -3,6 +3,8 @@ import {
   classifySuite,
   extractSuiteTag,
   isStabilityWrapperTest,
+  lifecycleFromJunitBody,
+  listFailedTestsForDisplay,
   parseBlockingFailuresFromLog,
   parseFailedTestsFromJunitXml,
   parseJunitFilenamesFromLog,
@@ -73,6 +75,77 @@ describe('junit suite classification', () => {
     expect(fails).toHaveLength(2);
     expect(fails[0].suite).toBe('conformance-parallel');
     expect(fails[1].name).toBe('monitor flake');
+  });
+
+  it('reads lifecycle property from junit testcase body', () => {
+    expect(
+      lifecycleFromJunitBody(
+        '<properties><property name="lifecycle" value="blocking"/></properties><failure/>',
+      ),
+    ).toBe('blocking');
+    expect(
+      lifecycleFromJunitBody(
+        '<property name="lifecycle" value="informing"/><failure message="x"/>',
+      ),
+    ).toBe('informing');
+    expect(lifecycleFromJunitBody('<failure message="x"/>')).toBeNull();
+
+    const xml = `<?xml version="1.0"?>
+<testsuite>
+  <testcase name="block me" time="1">
+    <properties>
+      <property name="source-binary" value="openshift-tests"/>
+      <property name="lifecycle" value="blocking"/>
+    </properties>
+    <failure message="boom"/>
+  </testcase>
+  <testcase name="info me" time="1">
+    <property name="lifecycle" value="informing"/>
+    <failure message="soft"/>
+  </testcase>
+</testsuite>`;
+    const fails = parseFailedTestsFromJunitXml(xml, 'junit_e2e__t.xml');
+    expect(fails.map((f) => [f.name, f.severity])).toEqual([
+      ['block me', 'blocking'],
+      ['info me', 'informing'],
+    ]);
+  });
+
+  it('lists every collected failure for display (never drops unknowns behind blocking)', () => {
+    const shown = listFailedTestsForDisplay({
+      failures: [
+        {
+          name: 'unknown product fail',
+          suite: 'conformance-parallel',
+          suiteTag: null,
+          source: 'junit',
+          junitFile: 'junit_e2e__x.xml',
+          severity: 'unknown',
+        },
+        {
+          name: 'blocking fail',
+          suite: 'upgrade',
+          suiteTag: null,
+          source: 'blocking-log',
+          junitFile: null,
+          severity: 'blocking',
+        },
+        {
+          name: 'informing fail',
+          suite: 'monitor',
+          suiteTag: null,
+          source: 'failures-summary',
+          junitFile: null,
+          severity: 'informing',
+        },
+      ],
+    });
+    expect(shown.map((f) => f.severity)).toEqual([
+      'blocking',
+      'unknown',
+      'informing',
+    ]);
+    expect(shown).toHaveLength(3);
   });
 
   it('recognizes upgrade stability wrapper test names', () => {

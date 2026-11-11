@@ -187,7 +187,8 @@ export function testNamesMatch(a: string, b: string): boolean {
 
 /**
  * Mark summary/JUnit failures as blocking vs informing using the build-log
- * "Blocking test failures" list and "N blocking fail, M informing fail" line.
+ * "Blocking test failures" list, JUnit `lifecycle` properties, and the
+ * "N blocking fail, M informing fail" suite line.
  */
 export function applyLifecycleSeverity(
   failures: FailedTestCase[],
@@ -204,17 +205,58 @@ export function applyLifecycleSeverity(
   }
   if (suiteSummary.blockingFail != null && suiteSummary.informingFail != null) {
     if (suiteSummary.informingFail === 0) {
-      for (const f of failures) f.severity = 'blocking';
+      for (const f of failures) {
+        if (f.severity === 'unknown') f.severity = 'blocking';
+      }
     } else if (suiteSummary.blockingFail === 0) {
-      for (const f of failures) f.severity = 'informing';
+      for (const f of failures) {
+        if (f.severity === 'unknown') f.severity = 'informing';
+      }
     }
-    // Mixed counts without a name list — leave existing severity.
+    // Mixed counts without a name list — keep JUnit lifecycle; leave the rest unknown.
     return;
   }
   // Authoritative summary with no informing/blocking split (e.g. monitor-only) → blocking.
   for (const f of failures) {
     if (f.severity === 'unknown') f.severity = 'blocking';
   }
+}
+
+/** Stable sort: blocking → unknown → informing, then suite, then name. */
+export function sortFailedTests(failures: FailedTestCase[]): FailedTestCase[] {
+  const sev = (s: FailedTestCase['severity']) =>
+    s === 'blocking' ? 0 : s === 'unknown' ? 1 : 2;
+  return [...failures].sort((a, b) => {
+    if (sev(a.severity) !== sev(b.severity)) return sev(a.severity) - sev(b.severity);
+    if (a.suite !== b.suite) return a.suite.localeCompare(b.suite);
+    return a.name.localeCompare(b.name);
+  });
+}
+
+/**
+ * Failed cases to show in the UI / hero / prompts.
+ * Always includes every collected failure (blocking, informing, and unknown).
+ * Collection already drops raw monitor XML noise when product fails exist.
+ */
+export function listFailedTestsForDisplay(
+  report: Pick<TestFailureReport, 'failures'>,
+): FailedTestCase[] {
+  return sortFailedTests(report.failures);
+}
+
+/** Pull openshift-tests `lifecycle` property out of a testcase body. */
+export function lifecycleFromJunitBody(
+  body: string,
+): 'blocking' | 'informing' | null {
+  for (const m of body.matchAll(/<property\b([^>]*)\/?>/gi)) {
+    const attrs = m[1] || '';
+    const name = attrs.match(/\bname="([^"]*)"/i)?.[1]?.toLowerCase();
+    const value = attrs.match(/\bvalue="([^"]*)"/i)?.[1]?.toLowerCase();
+    if (name === 'lifecycle' && (value === 'blocking' || value === 'informing')) {
+      return value;
+    }
+  }
+  return null;
 }
 
 /**
@@ -270,6 +312,7 @@ export function parseFailedTestsFromJunitXml(
   // Match self-closing or open testcase tags; then look ahead for failure/error before next testcase/suite end.
   const re =
     /<testcase\b([^>]*)(?:\/>|>([\s\S]*?)<\/testcase>)/gi;
+  const monitorFile = junitFile.toLowerCase().includes('monitor');
   for (const m of xml.matchAll(re)) {
     const attrs = m[1] || '';
     const body = m[2] || '';
@@ -277,35 +320,40 @@ export function parseFailedTestsFromJunitXml(
     const nameM = attrs.match(/\bname="([^"]*)"/i);
     const name = nameM?.[1]?.trim();
     if (!name) continue;
+    const lifecycle = lifecycleFromJunitBody(body);
     out.push({
       name,
       suite: classifySuite(name, junitFile, expectedSuite),
       suiteTag: extractSuiteTag(name),
       source: 'junit',
       junitFile,
-      severity: junitFile.toLowerCase().includes('monitor') ? 'informing' : 'unknown',
+      severity:
+        lifecycle ||
+        (monitorFile ? 'informing' : 'unknown'),
     });
   }
   return out;
 }
 
 function dedupeFailures(items: FailedTestCase[]): FailedTestCase[] {
-  const seen = new Set<string>();
   const out: FailedTestCase[] = [];
   for (const it of items) {
-    const key = it.name;
-    if (seen.has(key)) {
-      // Prefer blocking-log entry; upgrade severity if we saw blocking.
-      const prev = out.find((x) => x.name === key);
-      if (prev && it.severity === 'blocking') prev.severity = 'blocking';
-      if (prev && !prev.junitFile && it.junitFile) prev.junitFile = it.junitFile;
-      if (prev && !prev.suiteTag && it.suiteTag) {
+    const prev = out.find((x) => testNamesMatch(x.name, it.name));
+    if (prev) {
+      // Prefer blocking; keep the more specific name / junit metadata.
+      if (it.severity === 'blocking') prev.severity = 'blocking';
+      else if (prev.severity === 'unknown' && it.severity !== 'unknown') {
+        prev.severity = it.severity;
+      }
+      if (!prev.junitFile && it.junitFile) prev.junitFile = it.junitFile;
+      if (!prev.suiteTag && it.suiteTag) {
         prev.suiteTag = it.suiteTag;
         prev.suite = it.suite;
       }
+      // Prefer the longer / Suite-tagged name when merging summary ↔ junit.
+      if (it.name.length > prev.name.length) prev.name = it.name;
       continue;
     }
-    seen.add(key);
     out.push({ ...it });
   }
   return out;
@@ -454,9 +502,19 @@ export async function collectTestFailures(input: {
 
   let failures: FailedTestCase[];
 
+  /** Non-monitor JUnit fails not already covered by `base` (skip stability wrappers). */
+  const junitProductExtras = (base: FailedTestCase[]) =>
+    fromXml.filter(
+      (f) =>
+        f.suite !== 'monitor' &&
+        !isStabilityWrapperTest(f.name) &&
+        !base.some((b) => testNamesMatch(b.name, f.name)),
+    );
+
   if (fromSummary.length) {
     for (const s of fromSummary) attachJunitMeta(s);
-    failures = dedupeFailures(fromSummary);
+    // Merge product JUnit fails missing from Sippy summaries (seen on some upgrade jobs).
+    failures = dedupeFailures([...fromSummary, ...junitProductExtras(fromSummary)]);
     applyLifecycleSeverity(failures, blocking, summary);
     const nBlock = failures.filter((f) => f.severity === 'blocking').length;
     const nInfo = failures.filter((f) => f.severity === 'informing').length;
@@ -467,19 +525,33 @@ export async function collectTestFailures(input: {
     );
   } else {
     // Prefer blocking-log names as the authoritative product failures; keep junit-only
-    // cases (common on upgrade jobs / monitor) as additional failures.
-    const blockingNames = new Set(blocking.map((b) => b.name));
-    const junitExtras = fromXml.filter((f) => !blockingNames.has(f.name));
-
+    // product cases as additional failures. Do NOT dump raw monitor XML (often 100+
+    // pre-flake rows) — that flooded the UI and caused us to hide unknowns behind
+    // the blocking-only filter.
     for (const b of blocking) attachJunitMeta(b);
 
-    failures = dedupeFailures([...blocking, ...junitExtras]);
+    const productExtras = junitProductExtras(blocking);
+    const monitorOnly =
+      !blocking.length &&
+      !productExtras.length &&
+      fromXml.filter((f) => f.suite === 'monitor');
+
+    failures = dedupeFailures([
+      ...blocking,
+      ...productExtras,
+      ...(monitorOnly.length ? monitorOnly : []),
+    ]);
+
+    applyLifecycleSeverity(failures, blocking, summary);
 
     // When the log summary says N blocking fails but we only found them in junit_e2e
     // (no Blocking section — e.g. some upgrade runs), promote non-monitor junit fails.
     if (!blocking.length && summary.blockingFail && summary.blockingFail > 0) {
       const candidates = failures.filter(
-        (f) => f.suite !== 'monitor' && !isStabilityWrapperTest(f.name),
+        (f) =>
+          f.suite !== 'monitor' &&
+          !isStabilityWrapperTest(f.name) &&
+          f.severity !== 'informing',
       );
       const promote = candidates.length
         ? candidates
@@ -505,14 +577,7 @@ export async function collectTestFailures(input: {
     return null;
   }
 
-  // Stable sort: blocking first, then by suite label, then name.
-  failures = failures.sort((a, b) => {
-    const sev = (s: FailedTestCase['severity']) =>
-      s === 'blocking' ? 0 : s === 'unknown' ? 1 : 2;
-    if (sev(a.severity) !== sev(b.severity)) return sev(a.severity) - sev(b.severity);
-    if (a.suite !== b.suite) return a.suite.localeCompare(b.suite);
-    return a.name.localeCompare(b.name);
-  });
+  failures = sortFailedTests(failures);
 
   return {
     stepName: input.stepName,
