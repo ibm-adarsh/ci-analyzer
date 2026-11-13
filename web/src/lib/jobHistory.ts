@@ -60,26 +60,21 @@ function isFinishedSuccess(fin: {
   );
 }
 
-/**
- * Find the newest successful build strictly older than currentBuildId.
- * Uses GCS finished.json (browser-CORS safe). Skips missing/incomplete builds.
- * Probes older builds in parallel batches for latency.
- */
-export async function findLastGreenBuild(
-  bucket: string,
-  buildsPrefix: string,
-  currentBuildId: string,
-  opts: { maxProbe?: number; concurrency?: number } = {},
-): Promise<JobBuildRef | null> {
-  const maxProbe = opts.maxProbe ?? 60;
-  const concurrency = Math.max(1, opts.concurrency ?? 8);
-  const ids = await listJobBuildIds(bucket, buildsPrefix);
-  const cur = BigInt(currentBuildId);
-  const older = ids.filter((id) => BigInt(id) < cur).slice(0, maxProbe);
-  const base = buildsPrefix.replace(/\/+$/, '');
+export type GreenRelation = 'previous' | 'later';
 
-  for (let i = 0; i < older.length; i += concurrency) {
-    const batch = older.slice(i, i + concurrency);
+export interface GreenBuildHit extends JobBuildRef {
+  /** previous = older than current; later = only newer greens existed (fallback). */
+  relation: GreenRelation;
+}
+
+async function firstGreenInOrder(
+  bucket: string,
+  base: string,
+  orderedIds: string[],
+  concurrency: number,
+): Promise<JobBuildRef | null> {
+  for (let i = 0; i < orderedIds.length; i += concurrency) {
+    const batch = orderedIds.slice(i, i + concurrency);
     const fins = await Promise.all(
       batch.map(async (buildId) => {
         const gcsPath = `${base}/${buildId}`;
@@ -87,7 +82,7 @@ export async function findLastGreenBuild(
         return { buildId, gcsPath, fin };
       }),
     );
-    // Preserve newest-first order within the batch.
+    // Preserve caller order within the batch (newest-first for older; oldest-first for later).
     for (const row of fins) {
       if (!isFinishedSuccess(row.fin)) continue;
       return {
@@ -99,6 +94,40 @@ export async function findLastGreenBuild(
       };
     }
   }
+  return null;
+}
+
+/**
+ * Find a successful build to compare against.
+ * 1) Prefer the newest SUCCESS strictly older than current (classic "last green").
+ * 2) If none, fall back to the oldest SUCCESS newer than current — useful when
+ *    viewing an older failure while later runs already went green again.
+ * Uses GCS finished.json (browser-CORS safe).
+ */
+export async function findLastGreenBuild(
+  bucket: string,
+  buildsPrefix: string,
+  currentBuildId: string,
+  opts: { maxProbe?: number; concurrency?: number } = {},
+): Promise<GreenBuildHit | null> {
+  const maxProbe = opts.maxProbe ?? 60;
+  const concurrency = Math.max(1, opts.concurrency ?? 8);
+  const ids = await listJobBuildIds(bucket, buildsPrefix);
+  const cur = BigInt(currentBuildId);
+  const base = buildsPrefix.replace(/\/+$/, '');
+
+  const older = ids.filter((id) => BigInt(id) < cur).slice(0, maxProbe);
+  const prev = await firstGreenInOrder(bucket, base, older, concurrency);
+  if (prev) return { ...prev, relation: 'previous' };
+
+  // Newest-first ids → later successes sorted oldest-first (closest after current).
+  const later = ids
+    .filter((id) => BigInt(id) > cur)
+    .slice(0, maxProbe)
+    .reverse();
+  const next = await firstGreenInOrder(bucket, base, later, concurrency);
+  if (next) return { ...next, relation: 'later' };
+
   return null;
 }
 

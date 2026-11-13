@@ -4,7 +4,8 @@ import {
   buildsPrefixFromGcsPath,
   findLastGreenBuild,
   historyLinks,
-  type JobBuildRef,
+  type GreenBuildHit,
+  type GreenRelation,
 } from './jobHistory';
 import { resolveLpar } from './lparResolve';
 import { executionRoute, parseProwUrl, prowViewUrl } from './url';
@@ -37,7 +38,7 @@ export interface CompareRow {
 }
 
 export interface GreenCompareResult {
-  baselineRef: JobBuildRef;
+  baselineRef: GreenBuildHit;
   baseline: CompareSnapshot;
   current: CompareSnapshot;
   rows: CompareRow[];
@@ -46,6 +47,8 @@ export interface GreenCompareResult {
   historyUrl: string;
   greenUrl: string;
   probesChecked: boolean;
+  /** previous = classic last green; later = fell back to a newer success. */
+  relation: GreenRelation;
 }
 
 function dash(v: string | null | undefined): string {
@@ -168,5 +171,6 @@ export async function compareToLastGreen(
     historyUrl: links.historyUrl,
     greenUrl: links.greenUrl || greenRaw,
     probesChecked: true,
+    relation: green.relation,
   };
 }

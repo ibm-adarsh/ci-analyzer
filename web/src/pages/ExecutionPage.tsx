@@ -223,7 +223,11 @@ export function ExecutionPage() {
     void compareToLastGreen(a, setCompareLabel)
       .then((res) => {
         setCompare(res);
-        if (!res) setCompareErr('No earlier successful run found for this job (within recent history).');
+        if (!res) {
+          setCompareErr(
+            'No successful run found for this job in recent GCS history (checked older and newer builds).',
+          );
+        }
       })
       .catch((e) => {
         setCompare(null);
@@ -679,6 +683,14 @@ function ComparePanel({
             <a href={result.historyUrl} target="_blank" rel="noreferrer">
               Job history
             </a>
+            {result.relation === 'later' ? (
+              <span className="dbg-compare-delta">
+                {' '}
+                · no earlier green — using a newer successful run
+              </span>
+            ) : (
+              <span className="muted"> · previous successful run</span>
+            )}
             {result.baseline.started ? (
               <span className="muted">
                 {' '}
