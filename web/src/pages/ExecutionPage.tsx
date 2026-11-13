@@ -12,10 +12,12 @@ import { parseExecutionRoute } from '../lib/url';
 import {
   HETERO_ALIASES,
   HETERO_VPN_WORKFLOW_STEPS,
+  HYPERSHIFT_MCE_IBMZ_CONFORMANCE_OZ_STEPS,
   UPI_HETERO_WORKFLOW_STEPS,
   VPN_WORKFLOW_STEPS,
   WORKFLOW_DOCS,
   WORKFLOW_SOURCE,
+  inferStepPhase,
   type WorkflowPhase,
 } from '../data/vpnWorkflow';
 import { STEPS_CI } from '../data/workflow';
@@ -57,13 +59,11 @@ function phaseForStepName(name: string | null | undefined): WorkflowPhase | null
     ...VPN_WORKFLOW_STEPS,
     ...HETERO_VPN_WORKFLOW_STEPS,
     ...UPI_HETERO_WORKFLOW_STEPS,
+    ...HYPERSHIFT_MCE_IBMZ_CONFORMANCE_OZ_STEPS,
   ];
   const def = all.find((s) => s.name === canon || s.name === name);
   if (def) return def.phase;
-  if (/gather|cleanup-post|deprovision|kdump-gather/i.test(name)) return 'post';
-  if (/test|e2e/i.test(name)) return 'test';
-  if (/install|conf|cleanup-pre|fips|deprovision/i.test(name)) return 'pre';
-  return null;
+  return inferStepPhase(name);
 }
 
 function cleanTestName(name: string): string {

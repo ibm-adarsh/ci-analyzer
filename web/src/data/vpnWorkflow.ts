@@ -117,15 +117,74 @@ export const VPN_PROFILES = new Set([
   'libvirt-ppc64le-s2s',
 ]);
 
+/**
+ * hypershift-mce-ibmz-conformance-s390xmgmt-kubevirt-oz
+ * (IBM Z HCP / KubeVirt hosted cluster on a libvirt OZ management cluster).
+ *
+ * Source: openshift/release step-registry
+ *   hypershift/mce/ibmz/conformance-s390xmgmt-kubevirt-oz/
+ *
+ * Order matters: mgmt install → operators → HCP create → then conformance.
+ */
+export const HYPERSHIFT_MCE_IBMZ_CONFORMANCE_OZ_STEPS: WorkflowStepDef[] = [
+  // PRE — management cluster
+  { name: 'upi-libvirt-cleanup-pre', phase: 'pre', via: 'hypershift-mce-ibmz-create-s390xmgmt-oz' },
+  { name: 'ipi-install-rbac', phase: 'pre', via: 'upi-conf-libvirt' },
+  { name: 'upi-conf-libvirt-network', phase: 'pre', via: 'upi-conf-libvirt' },
+  { name: 'upi-conf-libvirt-agent', phase: 'pre', via: 'upi-conf-libvirt' },
+  { name: 'upi-conf-libvirt', phase: 'pre', via: 'upi-conf-libvirt' },
+  { name: 'ipi-conf-debug-kdump-configure-logs', phase: 'pre', via: 'upi-conf-libvirt' },
+  {
+    name: 'ipi-debug-missing-static-pod-controller-degraded',
+    phase: 'pre',
+    via: 'hypershift-mce-ibmz-create-s390xmgmt-oz',
+  },
+  { name: 'ipi-conf-etcd-on-ramfs', phase: 'pre', via: 'hypershift-mce-ibmz-create-s390xmgmt-oz' },
+  { name: 'upi-install-libvirt-network', phase: 'pre', via: 'upi-install-libvirt' },
+  { name: 'rhcos-conf-osstream', phase: 'pre', via: 'upi-install-libvirt' },
+  { name: 'upi-install-libvirt', phase: 'pre', via: 'upi-install-libvirt' },
+  // PRE — operators on mgmt
+  {
+    name: 'hypershift-mce-ibmz-install-metallb-oz',
+    phase: 'pre',
+    via: 'hypershift-mce-ibmz-install-operators-mgmt',
+  },
+  { name: 'hypershift-mce-install', phase: 'pre', via: 'hypershift-mce-ibmz-install-operators-mgmt' },
+  {
+    name: 'hypershift-kubevirt-install',
+    phase: 'pre',
+    via: 'hypershift-mce-ibmz-install-operators-mgmt',
+  },
+  {
+    name: 'hypershift-mce-ibmz-install-hpp',
+    phase: 'pre',
+    via: 'hypershift-mce-ibmz-install-operators-mgmt',
+  },
+  // PRE — create hosted control plane (must come before conformance)
+  { name: 'hypershift-mce-ibmz-create-hcpvirt-oz', phase: 'pre' },
+  // TEST — guest readiness then openshift-tests conformance
+  { name: 'test-ibmz-hostedcluster', phase: 'test', via: 'hypershift-mce-ibmz-test' },
+  { name: 'conformance-tests', phase: 'test', via: 'hypershift-conformance' },
+  // POST
+  { name: 'ipi-conf-debug-kdump-gather-logs', phase: 'post', bestEffort: true },
+  { name: 'gather-must-gather', phase: 'post', via: 'gather', bestEffort: true },
+  { name: 'gather-extra', phase: 'post', via: 'gather', bestEffort: true },
+  { name: 'gather-audit-logs', phase: 'post', via: 'gather', bestEffort: true },
+  { name: 'upi-libvirt-cleanup-post', phase: 'post' },
+];
+
 export type WorkflowKind =
   | 'openshift-e2e-libvirt-vpn'
   | 'openshift-e2e-libvirt-vpn-fips'
   | 'openshift-e2e-libvirt-upi'
   | 'openshift-e2e-libvirt-upi-heterogeneous'
-  | 'openshift-e2e-libvirt-heterogeneous-vpn';
+  | 'openshift-e2e-libvirt-heterogeneous-vpn'
+  | 'hypershift-mce-ibmz-conformance-s390xmgmt-kubevirt-oz';
 
 export function stepsForWorkflow(workflow: string | null | undefined): WorkflowStepDef[] {
   switch (workflow) {
+    case 'hypershift-mce-ibmz-conformance-s390xmgmt-kubevirt-oz':
+      return [...HYPERSHIFT_MCE_IBMZ_CONFORMANCE_OZ_STEPS];
     case 'openshift-e2e-libvirt-heterogeneous-vpn':
       return [...HETERO_VPN_WORKFLOW_STEPS];
     case 'openshift-e2e-libvirt-upi-heterogeneous':
@@ -149,14 +208,41 @@ export function workflowForJob(jobName: string, profile?: string | null): Workfl
   return stepsForWorkflow(wf);
 }
 
+/** Infer phase for a step name not present in a known workflow definition. */
+export function inferStepPhase(name: string): WorkflowPhase {
+  if (/gather|cleanup-post|deprovision|kdump-gather|hypershift-dump/i.test(name)) {
+    return 'post';
+  }
+  if (
+    /conformance-tests|openshift-e2e-libvirt-test|test-ibmz-hostedcluster|(^|-)e2e-test|(^|-)test$/i.test(
+      name,
+    )
+  ) {
+    return 'test';
+  }
+  return 'pre';
+}
+
 /** Infer workflow name from job + profile (profile from prowjob wins when passed). */
 export function inferWorkflowName(
   jobName: string,
   profile?: string | null,
 ): WorkflowKind | null {
-  if (!/libvirt/.test(jobName) && !profile?.includes('libvirt')) return null;
-
   const p = profile || '';
+
+  // IBM Z HyperShift / MCE HCP (KubeVirt) — must win over generic libvirt VPN.
+  if (
+    /hypershift/i.test(jobName) ||
+    /vpn-hcp/i.test(p) ||
+    /mce-e2e-ibmz|ibmz-s390x-mgmt|hcpvirt|kubevirt-oz/i.test(jobName)
+  ) {
+    if (/conformance/i.test(jobName) || /kubevirt|virt|hcp/i.test(jobName + p)) {
+      return 'hypershift-mce-ibmz-conformance-s390xmgmt-kubevirt-oz';
+    }
+  }
+
+  if (!/libvirt/.test(jobName) && !p.includes('libvirt')) return null;
+
   const fips = /fips/i.test(jobName) || p.includes('fips');
 
   if (
@@ -221,5 +307,10 @@ export const WORKFLOW_DOCS: Record<string, { yaml: string; stepsCi: string }> = 
   'openshift-e2e-libvirt-heterogeneous-vpn': {
     yaml: 'https://github.com/openshift/release/blob/main/ci-operator/step-registry/openshift/e2e/libvirt/heterogeneous/vpn/openshift-e2e-libvirt-heterogeneous-vpn-workflow.yaml',
     stepsCi: 'https://steps.ci.openshift.org/workflow/openshift-e2e-libvirt-heterogeneous-vpn',
+  },
+  'hypershift-mce-ibmz-conformance-s390xmgmt-kubevirt-oz': {
+    yaml: 'https://github.com/openshift/release/blob/master/ci-operator/step-registry/hypershift/mce/ibmz/conformance-s390xmgmt-kubevirt-oz/hypershift-mce-ibmz-conformance-s390xmgmt-kubevirt-oz-workflow.yaml',
+    stepsCi:
+      'https://steps.ci.openshift.org/workflow/hypershift-mce-ibmz-conformance-s390xmgmt-kubevirt-oz',
   },
 };

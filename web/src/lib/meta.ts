@@ -63,8 +63,11 @@ export function parseJobMeta(jobName: string): JobMeta {
   }
 
   const isLibvirt = /libvirt/.test(jobName);
+  const isHypershift = /hypershift|mce-e2e-ibmz|hcpvirt/i.test(jobName);
   let profile = isLibvirt ? 'libvirt-s390x-vpn' : '';
-  if (isLibvirt) {
+  if (isHypershift && /virt|kubevirt|hcp/i.test(jobName)) {
+    profile = 'libvirt-s390x-vpn-hcp';
+  } else if (isLibvirt) {
     if (/ppc64le|p-p/.test(jobName)) profile = 'libvirt-ppc64le-s2s';
     else if (/z-za/.test(jobName)) profile = 'libvirt-s390x-vpn-arm64';
     else if (/z-xz/.test(jobName) && /nightly-5\.0/.test(jobName))
@@ -74,7 +77,8 @@ export function parseJobMeta(jobName: string): JobMeta {
       profile = 'libvirt-s390x-vpn-arm64';
   }
 
-  const workflow = isLibvirt ? inferWorkflowName(jobName, profile) : null;
+  const workflow =
+    isLibvirt || isHypershift ? inferWorkflowName(jobName, profile) : null;
 
   let archClass: ArchClass = 'unknown';
   if (/z-za|z-xz/.test(jobName)) archClass = 'multi-arch-heterogeneous';

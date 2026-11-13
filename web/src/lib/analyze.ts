@@ -5,6 +5,7 @@ import {
   HETERO_VPN_WORKFLOW_STEPS,
   UPI_HETERO_WORKFLOW_STEPS,
   VPN_WORKFLOW_STEPS,
+  inferStepPhase,
   inferWorkflowName,
   stepsForWorkflow,
   workflowForJob,
@@ -257,7 +258,7 @@ function buildWorkflowView(
     };
   });
 
-  // Extra observed steps not in VPN workflow
+  // Extra observed steps not in the configured workflow (keep phase heuristics).
   for (const name of Object.keys(steps)) {
     if (workflow.some((w) => w.name === name)) continue;
     if (HETERO_ALIASES[name]) continue;
@@ -265,7 +266,7 @@ function buildWorkflowView(
     workflow.push({
       name,
       observedName: null,
-      phase: 'pre',
+      phase: inferStepPhase(name),
       status: obs.status,
       observed: true,
       duration: obs.duration,
@@ -512,7 +513,16 @@ export async function analyzeExecution(
 
   onProgress?.(92, 'Parsing failed test cases…');
   let testFailures: TestFailureReport | null = null;
-  const testStepName = 'openshift-e2e-libvirt-test';
+  // Libvirt VPN uses openshift-e2e-libvirt-test; HCP / HyperShift uses conformance-tests.
+  const testStepName = [
+    'openshift-e2e-libvirt-test',
+    'conformance-tests',
+  ].find((n) => steps[n]?.status === 'failed')
+    || (steps['openshift-e2e-libvirt-test']
+      ? 'openshift-e2e-libvirt-test'
+      : steps['conformance-tests']
+        ? 'conformance-tests'
+        : 'openshift-e2e-libvirt-test');
   const testStep = steps[testStepName];
   const testPhaseFailed =
     phaseStatus.test === 'failed' || testStep?.status === 'failed';
