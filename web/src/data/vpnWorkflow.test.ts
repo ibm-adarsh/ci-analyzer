@@ -45,3 +45,59 @@ describe('hypershift HCP workflow', () => {
     expect(inferStepPhase('hypershift-mce-ibmz-create-hcpvirt-oz')).toBe('pre');
   });
 });
+
+describe('existing libvirt workflows stay mapped', () => {
+  it('keeps homogeneous VPN as the default libvirt workflow', () => {
+    expect(
+      inferWorkflowName(
+        'periodic-ci-openshift-multiarch-main-nightly-5.0-ocp-e2e-ovn-remote-libvirt-multi-z-z',
+        'libvirt-s390x-vpn',
+      ),
+    ).toBe('openshift-e2e-libvirt-vpn');
+  });
+
+  it('keeps FIPS on the FIPS VPN workflow', () => {
+    expect(
+      inferWorkflowName(
+        'periodic-ci-openshift-multiarch-main-nightly-4.22-ocp-fips-ovn-remote-libvirt-multi-z-z',
+        'libvirt-s390x-vpn',
+      ),
+    ).toBe('openshift-e2e-libvirt-vpn-fips');
+  });
+
+  it('keeps z-xz classical UPI hetero', () => {
+    expect(
+      inferWorkflowName(
+        'periodic-ci-openshift-multiarch-main-nightly-5.1-ocp-e2e-ovn-remote-libvirt-multi-z-xz',
+        'libvirt-s390x-amd64',
+      ),
+    ).toBe('openshift-e2e-libvirt-upi-heterogeneous');
+  });
+
+  it('keeps z-za / vpn-arm64 on hetero VPN', () => {
+    expect(
+      inferWorkflowName(
+        'periodic-ci-openshift-multiarch-main-nightly-5.1-ocp-e2e-ovn-remote-libvirt-multi-z-za',
+        'libvirt-s390x-vpn-arm64',
+      ),
+    ).toBe('openshift-e2e-libvirt-heterogeneous-vpn');
+  });
+
+  it('does not steal plain VPN jobs into hypershift', () => {
+    expect(
+      inferWorkflowName(
+        'periodic-ci-openshift-multiarch-main-nightly-4.20-ocp-e2e-ovn-remote-libvirt-multi-z-z',
+        'libvirt-s390x-vpn',
+      ),
+    ).not.toContain('hypershift');
+  });
+
+  it('keeps openshift-e2e-libvirt-test in TEST for VPN steps', () => {
+    const steps = stepsForWorkflow('openshift-e2e-libvirt-vpn');
+    expect(steps.find((s) => s.name === 'openshift-e2e-libvirt-test')?.phase).toBe(
+      'test',
+    );
+    expect(steps.find((s) => s.name === 'upi-install-libvirt')?.phase).toBe('pre');
+    expect(steps.find((s) => s.name === 'gather-extra')?.phase).toBe('post');
+  });
+});
