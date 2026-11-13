@@ -7,7 +7,6 @@ on:
     paths:
       - 'web/**'
       - '.github/workflows/pages.yml'
-      - 'tools/prow-job-analyzer/**'
   workflow_dispatch:
 
 permissions:

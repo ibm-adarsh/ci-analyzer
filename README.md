@@ -67,9 +67,7 @@ git clone --filter=blob:none --depth 1 https://github.com/openshift/release.git 
 
 ## Scope
 
-Focused on IBM Z libvirt jobs (`libvirt-s390x-vpn`, heterogeneous `libvirt-s390x-amd64`, and related) using workflows `openshift-e2e-libvirt-vpn` (+ fips), `openshift-e2e-libvirt-upi`, and `openshift-e2e-libvirt-upi-heterogeneous` as defined in the release step-registry for OCP 4.13–5.x.
-
-Legacy zero-dep HTML (optional): `tools/prow-job-analyzer/legacy.html`.
+Focused on IBM Z libvirt jobs (`libvirt-s390x-vpn`, heterogeneous `libvirt-s390x-amd64`, and related) using workflows `openshift-e2e-libvirt-vpn` (+ fips), `openshift-e2e-libvirt-upi`, `openshift-e2e-libvirt-heterogeneous-vpn`, and HyperShift MCE HCP as defined in the release step-registry for OCP 4.13–5.x.
 
 ---
 

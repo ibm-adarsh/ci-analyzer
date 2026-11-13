@@ -100,7 +100,6 @@ flowchart TB
 | **YAML** | `.github/workflows/pages.yml` | Publish pipeline |
 | **Markdown** | `README.md`, `ARCHITECTURE.md` | Docs |
 | **HTML** | `web/index.html`, build `404.html` | App shell; deep links on Pages |
-| **Go / shell (optional)** | `tools/**` | Old / side tools — **not** used by the live app |
 
 There is **no** Node/Express/Python backend for the debugger. GitHub Pages only serves files.
 
@@ -114,7 +113,6 @@ flowchart TB
   ROOT --> WEB[web/ · THE APP]
   ROOT --> GHA[.github/workflows/pages.yml]
   ROOT --> DOCS[ARCHITECTURE.md · README.md]
-  ROOT --> TOOLS[tools/ · optional / old]
   ROOT --> CACHE[.cache/release · local clone, not in git]
 
   WEB --> SRC[src/]
@@ -135,7 +133,6 @@ flowchart TB
 | `web/src/data/` | Fixed IBM Z CI knowledge |
 | `web/scripts/` | Live GCS smoke tests |
 | `.github/workflows/pages.yml` | Test, build, publish |
-| `tools/` | Extra / old helpers — not needed to run the app |
 | `.cache/release/` | Optional local clone of openshift/release (ignored by git) |
 
 ---
