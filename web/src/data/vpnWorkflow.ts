@@ -110,12 +110,51 @@ export const HETERO_ALIASES: Record<string, string> = {
 export const VPN_PROFILES = new Set([
   'libvirt-s390x-vpn',
   'libvirt-s390x-vpn-oz',
+  'libvirt-s390x-vpn-hcp',
   'libvirt-s390x-vpn-arm64',
   'libvirt-s390x-vpn-amd64',
   'libvirt-s390x-amd64',
   'libvirt-ppc64le-vpn',
   'libvirt-ppc64le-s2s',
 ]);
+
+/**
+ * Inventory workflows currently used by the IBM Z CI dashboard (matched to
+ * openshift/release). Analysis must cover each of these.
+ */
+export const INVENTORY_WORKFLOWS = [
+  'openshift-e2e-libvirt-vpn',
+  'openshift-e2e-libvirt-vpn-fips',
+  'openshift-e2e-libvirt-heterogeneous-vpn',
+  'hypershift-mce-ibmz-conformance-s390xmgmt-kubevirt-oz',
+] as const satisfies readonly WorkflowKind[];
+
+/** Steps that run openshift-tests / produce junit under artifacts/junit/. */
+export const TEST_SUITE_STEPS = [
+  'openshift-e2e-libvirt-test',
+  'conformance-tests',
+] as const;
+
+export function isTestSuiteStep(name: string | null | undefined): boolean {
+  return !!name && (TEST_SUITE_STEPS as readonly string[]).includes(name);
+}
+
+/** Prefer a failed suite step when present; otherwise the workflow's primary test leaf. */
+export function resolveTestSuiteStep(
+  steps: Record<string, { status?: string }>,
+  workflow?: string | null,
+): string {
+  for (const n of TEST_SUITE_STEPS) {
+    if (steps[n]?.status === 'failed') return n;
+  }
+  if (workflow === 'hypershift-mce-ibmz-conformance-s390xmgmt-kubevirt-oz') {
+    if (steps['conformance-tests']) return 'conformance-tests';
+  }
+  for (const n of TEST_SUITE_STEPS) {
+    if (steps[n]) return n;
+  }
+  return 'openshift-e2e-libvirt-test';
+}
 
 /**
  * hypershift-mce-ibmz-conformance-s390xmgmt-kubevirt-oz

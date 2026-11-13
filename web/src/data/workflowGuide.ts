@@ -635,6 +635,88 @@ export const GUIDE_WORKFLOWS: GuideWorkflow[] = [
     releaseYaml: `${RELEASE}/ci-operator/step-registry/openshift/e2e/libvirt/upi/heterogeneous/openshift-e2e-libvirt-upi-heterogeneous-workflow.yaml`,
     steps: UPI_HETERO_LEAF_STEPS,
   },
+  {
+    id: 'hypershift-oz',
+    name: 'hypershift-mce-ibmz-conformance-s390xmgmt-kubevirt-oz',
+    title: 'HyperShift MCE IBM Z HCP (OZ)',
+    summary:
+      'Installs an s390x libvirt management cluster, installs MCE/KubeVirt/HPP/MetalLB, creates a KubeVirt HostedCluster, then runs openshift-tests conformance on the guest (conformance-tests — not openshift-e2e-libvirt-test).',
+    since: '5.x',
+    profiles: ['libvirt-s390x-vpn-hcp', 'libvirt-s390x-vpn-oz'],
+    stepsCi: stepCi('workflow', 'hypershift-mce-ibmz-conformance-s390xmgmt-kubevirt-oz'),
+    releaseYaml: `${RELEASE}/ci-operator/step-registry/hypershift/mce/ibmz/conformance-s390xmgmt-kubevirt-oz/hypershift-mce-ibmz-conformance-s390xmgmt-kubevirt-oz-workflow.yaml`,
+    steps: [
+      {
+        name: 'upi-install-libvirt',
+        phase: 'pre',
+        ocpStage: 'Mgmt cluster · install',
+        summary: 'Install the s390x management cluster on OZ libvirt.',
+        whenFails: 'Same as VPN install: check .openshift_install.log and lease/libvirt connectivity.',
+        stepsCi: stepCi('ref', 'upi-install-libvirt'),
+        keyArtifacts: ['build-log.txt', 'artifacts/.openshift_install.log'],
+      },
+      {
+        name: 'hypershift-mce-install',
+        phase: 'pre',
+        ocpStage: 'Mgmt · MCE',
+        summary: 'Install Multicluster Engine on the management cluster.',
+        whenFails: 'OLM / MCE operator not Ready — check subscriptions and catalog.',
+        stepsCi: stepCi('ref', 'hypershift-mce-install'),
+        keyArtifacts: ['build-log.txt'],
+      },
+      {
+        name: 'hypershift-kubevirt-install',
+        phase: 'pre',
+        ocpStage: 'Mgmt · KubeVirt',
+        summary: 'Install KubeVirt for virt-based hosted workers.',
+        stepsCi: stepCi('ref', 'hypershift-kubevirt-install'),
+        keyArtifacts: ['build-log.txt'],
+      },
+      {
+        name: 'hypershift-mce-ibmz-create-hcpvirt-oz',
+        phase: 'pre',
+        ocpStage: 'HCP · create HostedCluster',
+        summary: 'Create the KubeVirt HostedCluster (must succeed before conformance).',
+        whenFails: 'Inspect HostedCluster/NodePool conditions; no guest means conformance cannot run.',
+        stepsCi: stepCi('ref', 'hypershift-mce-ibmz-create-hcpvirt-oz'),
+        keyArtifacts: ['build-log.txt', 'artifacts/'],
+      },
+      {
+        name: 'test-ibmz-hostedcluster',
+        phase: 'test',
+        ocpStage: 'HCP · guest ready',
+        summary: 'Wait for HostedCluster / guest readiness.',
+        stepsCi: stepCi('ref', 'test-ibmz-hostedcluster'),
+        keyArtifacts: ['build-log.txt'],
+      },
+      {
+        name: 'conformance-tests',
+        phase: 'test',
+        ocpStage: 'Conformance on guest',
+        summary: 'Run openshift-tests on the hosted cluster (junit under artifacts/junit/).',
+        whenFails: 'Same junit/e2e.log debugging as libvirt-test; confirm guest was Available first.',
+        stepsCi: stepCi('ref', 'conformance-tests'),
+        keyArtifacts: ['build-log.txt', 'artifacts/junit/', 'artifacts/e2e.log'],
+      },
+      {
+        name: 'gather-must-gather',
+        phase: 'post',
+        ocpStage: 'Debug · must-gather',
+        summary: 'Must-gather from the management path (best-effort).',
+        bestEffort: true,
+        via: 'gather',
+        stepsCi: stepCi('ref', 'gather-must-gather'),
+      },
+      {
+        name: 'upi-libvirt-cleanup-post',
+        phase: 'post',
+        ocpStage: 'Deprovision',
+        summary: 'Tear down mgmt-cluster libvirt resources for the lease.',
+        stepsCi: stepCi('ref', 'upi-libvirt-cleanup-post'),
+        keyArtifacts: ['build-log.txt'],
+      },
+    ],
+  },
 ];
 
 export const CLUSTER_PROFILES: ClusterProfileInfo[] = [
@@ -662,6 +744,18 @@ export const CLUSTER_PROFILES: ClusterProfileInfo[] = [
     usage: 'Boskos oz leases; some slots carved out for hetero amd64/arm64 and HCP.',
     connectivity: 'Prow → VPN → OZ LPAR qemu+tcp.',
     typicalJobs: ['operator jobs on vpn-oz', 'shared with hetero carve-outs'],
+    status: 'specialized',
+  },
+  {
+    id: 'libvirt-s390x-vpn-hcp',
+    title: 'libvirt-s390x-vpn-hcp',
+    summary: 'OZ HCP / HyperShift management-cluster leases.',
+    usage:
+      'Used by hypershift-mce-ibmz-conformance-s390xmgmt-kubevirt-oz (mgmt install + HCP create + guest conformance).',
+    connectivity: 'Prow → VPN → OZ LPAR qemu+tcp (mgmt); guest via KubeVirt on that mgmt cluster.',
+    typicalJobs: [
+      'mce-e2e-ibmz-s390x-mgmt-ovn-conformance-virt-z-z',
+    ],
     status: 'specialized',
   },
   {
@@ -1006,6 +1100,9 @@ export function workflowByName(name: string | null | undefined): GuideWorkflow {
 
 export function workflowByJobHints(jobName: string, workflow?: string | null): GuideWorkflow {
   if (workflow) return workflowByName(workflow);
+  if (/hypershift|hcp|mce-e2e-ibmz|s390x-mgmt|kubevirt-oz/i.test(jobName)) {
+    return workflowByName('hypershift-oz');
+  }
   if (/fips/i.test(jobName)) return workflowByName('vpn-fips');
   if (/z-za/i.test(jobName) || (/z-xz/i.test(jobName) && /nightly-5\.0/.test(jobName))) {
     return workflowByName('hetero-vpn');

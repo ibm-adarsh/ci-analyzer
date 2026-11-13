@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   HYPERSHIFT_MCE_IBMZ_CONFORMANCE_OZ_STEPS,
+  INVENTORY_WORKFLOWS,
   inferStepPhase,
   inferWorkflowName,
+  isTestSuiteStep,
+  resolveTestSuiteStep,
   stepsForWorkflow,
 } from './vpnWorkflow';
 
@@ -99,5 +102,37 @@ describe('existing libvirt workflows stay mapped', () => {
     );
     expect(steps.find((s) => s.name === 'upi-install-libvirt')?.phase).toBe('pre');
     expect(steps.find((s) => s.name === 'gather-extra')?.phase).toBe('post');
+  });
+
+  it('covers inventory dashboard workflows with step definitions', () => {
+    for (const wf of INVENTORY_WORKFLOWS) {
+      const steps = stepsForWorkflow(wf);
+      expect(steps.length).toBeGreaterThan(5);
+      expect(steps.some((s) => s.phase === 'test')).toBe(true);
+    }
+  });
+
+  it('resolves suite steps for VPN vs HCP', () => {
+    expect(isTestSuiteStep('openshift-e2e-libvirt-test')).toBe(true);
+    expect(isTestSuiteStep('conformance-tests')).toBe(true);
+    expect(isTestSuiteStep('upi-install-libvirt')).toBe(false);
+    expect(
+      resolveTestSuiteStep(
+        { 'openshift-e2e-libvirt-test': { status: 'failed' } },
+        'openshift-e2e-libvirt-vpn',
+      ),
+    ).toBe('openshift-e2e-libvirt-test');
+    expect(
+      resolveTestSuiteStep(
+        { 'conformance-tests': { status: 'failed' } },
+        'hypershift-mce-ibmz-conformance-s390xmgmt-kubevirt-oz',
+      ),
+    ).toBe('conformance-tests');
+    expect(
+      resolveTestSuiteStep(
+        { 'conformance-tests': { status: 'success' } },
+        'hypershift-mce-ibmz-conformance-s390xmgmt-kubevirt-oz',
+      ),
+    ).toBe('conformance-tests');
   });
 });

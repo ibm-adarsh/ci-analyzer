@@ -131,6 +131,56 @@ export const STEP_INFO: Record<string, StepInfo> = {
     ],
     keyFiles: ['openshift-e2e-libvirt-test/build-log.txt','openshift-e2e-libvirt-test/e2e.log'],
   },
+  'fips-check': {
+    desc: 'Verifies FIPS mode on cluster nodes after install (vpn-fips workflow).',
+    hints: [
+      { t:'Failure = node not in FIPS mode or fips-check script error. Confirm install-config fips: true and RHCOS FIPS image.', cls:'warn' },
+    ],
+    keyFiles: ['fips-check/build-log.txt'],
+  },
+  'conformance-tests': {
+    desc: 'HyperShift HCP guest: runs openshift-tests conformance (same junit/e2e.log layout as libvirt-test).',
+    hints: [
+      { t:'Find failures in artifacts/junit/ or "Failing tests:" in build-log.txt / e2e.log.', cls:'warn' },
+      { t:'Runs after create-hcpvirt-oz + test-ibmz-hostedcluster — if those failed, guest may never have been ready.', cls:'info' },
+    ],
+    keyFiles: ['conformance-tests/build-log.txt', 'conformance-tests/artifacts/e2e.log'],
+  },
+  'test-ibmz-hostedcluster': {
+    desc: 'Waits for IBM Z HostedCluster / guest readiness before conformance.',
+    hints: [
+      { t:'Failure = HCP not Available / NodePools not ready. Check create-hcpvirt-oz artifacts and mgmt cluster operators.', cls:'warn' },
+    ],
+    keyFiles: ['test-ibmz-hostedcluster/build-log.txt'],
+  },
+  'hypershift-mce-ibmz-create-hcpvirt-oz': {
+    desc: 'Creates the KubeVirt HostedCluster (HCP) on the s390x management cluster.',
+    hints: [
+      { t:'Failure here = no guest for conformance. Inspect HostedCluster/NodePool conditions in step artifacts.', cls:'warn' },
+      { t:'Must succeed before TEST phase (test-ibmz-hostedcluster → conformance-tests).', cls:'info' },
+    ],
+    keyFiles: ['hypershift-mce-ibmz-create-hcpvirt-oz/build-log.txt'],
+  },
+  'hypershift-mce-install': {
+    desc: 'Installs Multicluster Engine (MCE) on the management cluster.',
+    hints: [{ t:'MCE/HyperShift operator not Ready → check OLM subscriptions and catalog sources.', cls:'warn' }],
+    keyFiles: ['hypershift-mce-install/build-log.txt'],
+  },
+  'hypershift-kubevirt-install': {
+    desc: 'Installs KubeVirt (CNV) on the management cluster for HCP virt workers.',
+    hints: [{ t:'KubeVirt not Available → guest VMs cannot start. Check CDI/HPP and virt-operator logs.', cls:'warn' }],
+    keyFiles: ['hypershift-kubevirt-install/build-log.txt'],
+  },
+  'hypershift-mce-ibmz-install-metallb-oz': {
+    desc: 'Installs MetalLB on the OZ management cluster (LB for HCP services).',
+    hints: [{ t:'MetalLB failure often blocks API/ingress reachability to the hosted cluster.', cls:'warn' }],
+    keyFiles: ['hypershift-mce-ibmz-install-metallb-oz/build-log.txt'],
+  },
+  'hypershift-mce-ibmz-install-hpp': {
+    desc: 'Installs HostPath Provisioner storage for KubeVirt on the mgmt cluster.',
+    hints: [{ t:'HPP/storage class missing → NodePool VMs fail to provision disks.', cls:'warn' }],
+    keyFiles: ['hypershift-mce-ibmz-install-hpp/build-log.txt'],
+  },
   'ipi-conf-debug-kdump-gather-logs': {
     desc: 'Collects kdump crash dump files from nodes (best_effort — failure does not fail the job).',
     hints: [{ t:'If kdump archives present → kernel panic occurred on a node. Escalate to kernel team.', cls:'warn' }],

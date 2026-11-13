@@ -39,4 +39,16 @@ describe('keyArtifactsFor', () => {
       'https://example/gather-must-gather/artifacts/must-gather.tar.gz',
     );
   });
+
+  it('points HCP conformance-tests junit/e2e the same way as libvirt-test', () => {
+    const arts = keyArtifactsFor(
+      'conformance-tests',
+      'https://example/conformance-tests',
+    );
+    expect(arts.map((a) => a.url)).toEqual([
+      'https://example/conformance-tests/build-log.txt',
+      'https://example/conformance-tests/artifacts/junit/',
+      'https://example/conformance-tests/artifacts/e2e.log',
+    ]);
+  });
 });

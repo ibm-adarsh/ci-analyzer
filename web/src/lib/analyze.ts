@@ -7,6 +7,8 @@ import {
   VPN_WORKFLOW_STEPS,
   inferStepPhase,
   inferWorkflowName,
+  isTestSuiteStep,
+  resolveTestSuiteStep,
   stepsForWorkflow,
   workflowForJob,
 } from '../data/vpnWorkflow';
@@ -182,9 +184,15 @@ export function keyArtifactsFor(
       url: `${stepBase}/artifacts/.openshift_install.log`,
     });
   }
-  if (step === 'openshift-e2e-libvirt-test') {
+  if (isTestSuiteStep(step)) {
     out.push({ label: 'artifacts/junit/', url: `${stepBase}/artifacts/junit/` });
     out.push({ label: 'artifacts/e2e.log', url: `${stepBase}/artifacts/e2e.log` });
+  }
+  if (step === 'hypershift-mce-ibmz-create-hcpvirt-oz') {
+    out.push({
+      label: 'artifacts/ (HCP create)',
+      url: `${stepBase}/artifacts/`,
+    });
   }
   if (step === 'gather-must-gather') {
     out.push({
@@ -513,16 +521,8 @@ export async function analyzeExecution(
 
   onProgress?.(92, 'Parsing failed test cases…');
   let testFailures: TestFailureReport | null = null;
-  // Libvirt VPN uses openshift-e2e-libvirt-test; HCP / HyperShift uses conformance-tests.
-  const testStepName = [
-    'openshift-e2e-libvirt-test',
-    'conformance-tests',
-  ].find((n) => steps[n]?.status === 'failed')
-    || (steps['openshift-e2e-libvirt-test']
-      ? 'openshift-e2e-libvirt-test'
-      : steps['conformance-tests']
-        ? 'conformance-tests'
-        : 'openshift-e2e-libvirt-test');
+  // Libvirt VPN / hetero: openshift-e2e-libvirt-test. HCP: conformance-tests.
+  const testStepName = resolveTestSuiteStep(steps, meta.workflow);
   const testStep = steps[testStepName];
   const testPhaseFailed =
     phaseStatus.test === 'failed' || testStep?.status === 'failed';

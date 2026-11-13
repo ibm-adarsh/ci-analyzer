@@ -98,7 +98,7 @@ export function buildDiagnosis(input: {
       desc: 'Full openshift-install log',
     });
   }
-  if (ref === 'openshift-e2e-libvirt-test') {
+  if (ref === 'openshift-e2e-libvirt-test' || ref === 'conformance-tests') {
     d.evidence.push({
       label: `${ref}/artifacts/junit/`,
       url: `${input.artBase}/${ref}/artifacts/junit/`,
@@ -112,6 +112,15 @@ export function buildDiagnosis(input: {
       kind: 'log',
       primary: false,
       desc: 'openshift-tests e2e log',
+    });
+  }
+  if (ref === 'hypershift-mce-ibmz-create-hcpvirt-oz') {
+    d.evidence.push({
+      label: `${ref}/artifacts/`,
+      url: `${input.artBase}/${ref}/artifacts/`,
+      kind: 'dir',
+      primary: true,
+      desc: 'HCP create artifacts (HostedCluster / NodePool status)',
     });
   }
   for (const g of ['gather-extra', 'gather-must-gather', 'gather-audit-logs']) {
