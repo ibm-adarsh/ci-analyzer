@@ -3,6 +3,7 @@ import { LEASE_BY_SLOT } from '../data/lpar';
 import {
   HETERO_ALIASES,
   HETERO_VPN_WORKFLOW_STEPS,
+  HYPERSHIFT_MCE_IBMZ_CONFORMANCE_OZ_STEPS,
   UPI_HETERO_WORKFLOW_STEPS,
   VPN_WORKFLOW_STEPS,
   inferStepPhase,
@@ -93,12 +94,15 @@ async function fetchAllSteps(
       .filter((n) => n && !NON_TEST_ARTIFACT_DIRS.has(n)),
   );
 
+  // Include every inventory workflow's leaves so HCP / hetero steps are not
+  // appended after POST (that made many durations show as 0s).
   const configured = [
     ...new Set(
       [
         ...VPN_WORKFLOW_STEPS,
         ...HETERO_VPN_WORKFLOW_STEPS,
         ...UPI_HETERO_WORKFLOW_STEPS,
+        ...HYPERSHIFT_MCE_IBMZ_CONFORMANCE_OZ_STEPS,
       ].map((s) => s.name),
     ),
   ];
@@ -123,20 +127,15 @@ async function fetchAllSteps(
     }),
   );
 
-  let prevEndTs = started?.timestamp ?? null;
   const results: Record<string, StepResult> = {};
 
   for (const stepName of toFetch) {
     const { finJson, logText, stepBase } = rawData[stepName];
     let status: StepStatus = 'unknown';
-    let duration: number | null = null;
-    let endTs: number | null = null;
 
     if (finJson) {
       if (finJson.passed === true) status = 'passed';
       else if (finJson.passed === false) status = 'failed';
-      endTs = finJson.timestamp ?? null;
-      if (endTs && prevEndTs) duration = Math.max(0, endTs - prevEndTs);
     } else if (logText && logText !== '__REDACTED__') {
       // Directory exists, finished.json missing → step is currently executing
       if (/\+ exit [1-9]|\blevel=error\b.*exit|step failed/i.test(logText)) status = 'failed';
@@ -144,8 +143,6 @@ async function fetchAllSteps(
     } else if (logText === '__REDACTED__') {
       status = 'unknown';
     }
-
-    if (endTs) prevEndTs = endTs;
 
     const safeLog = logText && logText !== '__REDACTED__' ? logText : '';
     const logTail = safeLog
@@ -155,7 +152,7 @@ async function fetchAllSteps(
         : null;
     results[stepName] = {
       status,
-      duration,
+      duration: null,
       finJson,
       logTail,
       logText: safeLog || null,
@@ -165,7 +162,31 @@ async function fetchAllSteps(
     };
   }
 
+  // Duration = gap between successive finished.json timestamps in time order,
+  // not fetch/list order (HCP leaves used to sit after cleanup-post → many 0s).
+  assignStepDurations(results, started?.timestamp ?? null);
+
   return results;
+}
+
+/**
+ * Infer each step's wall time from finished.json timestamps.
+ * Sort by end time; duration[i] = end[i] − end[i−1] (or job started for the first).
+ */
+export function assignStepDurations(
+  results: Record<string, Pick<StepResult, 'duration' | 'finJson'>>,
+  startedTs: number | null,
+): void {
+  const finished = Object.entries(results)
+    .filter(([, r]) => typeof r.finJson?.timestamp === 'number')
+    .map(([name, r]) => ({ name, endTs: r.finJson!.timestamp as number }))
+    .sort((a, b) => a.endTs - b.endTs || a.name.localeCompare(b.name));
+
+  let prev = startedTs;
+  for (const { name, endTs } of finished) {
+    results[name].duration = prev != null ? Math.max(0, endTs - prev) : null;
+    prev = endTs;
+  }
 }
 
 /** Key GCS artifact links for a step — paths match what ci-operator actually uploads. */
