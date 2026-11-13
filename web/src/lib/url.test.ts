@@ -57,6 +57,10 @@ describe('meta classification', () => {
     expect(parseJobMeta('…libvirt-multi-z-z').profile).toBe('libvirt-s390x-vpn');
     expect(parseJobMeta('…libvirt-multi-z-za').profile).toBe('libvirt-s390x-vpn-arm64');
     expect(parseJobMeta('…libvirt-multi-z-xz').profile).toBe('libvirt-s390x-amd64');
+    expect(parseJobMeta('…libvirt-multi-z-zx').profile).toBe('libvirt-s390x-amd64');
+    expect(parseJobMeta('…libvirt-multi-z-zx').topologyShort).toBe(
+      'Heterogeneous (z-xz)',
+    );
     expect(parseJobMeta('nightly-5.0-…libvirt-multi-z-xz').profile).toBe(
       'libvirt-s390x-vpn-amd64',
     );
@@ -66,8 +70,14 @@ describe('meta classification', () => {
     expect(parseJobMeta('…libvirt-multi-z-xz').workflow).toBe(
       'openshift-e2e-libvirt-upi-heterogeneous',
     );
+    expect(parseJobMeta('…libvirt-multi-z-zx').workflow).toBe(
+      'openshift-e2e-libvirt-upi-heterogeneous',
+    );
     expect(parseJobMeta('nightly-5.0-…libvirt-multi-z-xz').workflow).toBe(
       'openshift-e2e-libvirt-heterogeneous-vpn',
+    );
+    expect(parseJobMeta('…e2e-agent-ibmz-sno').topologyShort).toBe(
+      'Agent SNO (ibmz)',
     );
     expect(parseJobMeta('…fips…libvirt-multi-z-z').workflow).toBe(
       'openshift-e2e-libvirt-vpn-fips',
@@ -100,6 +110,28 @@ describe('vpn workflow pending', () => {
 });
 
 describe('diagnosis', () => {
+  it('detects Boskos lease failure when no step dirs exist', () => {
+    const d = buildDiagnosis({
+      result: 'FAILED',
+      firstFailed: null,
+      secondaryFailed: [],
+      steps: {},
+      artBase: 'https://storage.example/bucket/logs/job/1/artifacts',
+      raw: 'https://prow.example/view/gs/bucket/logs/job/1',
+      counts: { passed: 0, failed: 0, skipped: 0, unknown: 0, running: 0 },
+      prowLog:
+        'Acquiring leases for test ocp-e2e-ovn-remote-libvirt-multi-z-zx: [libvirt-s390x-amd64-quota-slice]\n' +
+        'error: Failed to acquire resource, current capacity: 0 free, 1 leased\n' +
+        'failed to acquire lease for "libvirt-s390x-amd64-quota-slice": resources not found',
+    });
+    expect(d.confidence).toBe('high');
+    expect(d.summary).toMatch(/lease/i);
+    expect(d.hypotheses.some((h) => h.tag === 'lease')).toBe(true);
+    expect(d.evidence[0]?.url).toBe(
+      'https://storage.example/bucket/logs/job/1/build-log.txt',
+    );
+  });
+
   it('prefers non-best-effort primary and links evidence', () => {
     const d = buildDiagnosis({
       result: 'FAILED',

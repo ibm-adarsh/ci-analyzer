@@ -1104,10 +1104,13 @@ export function workflowByJobHints(jobName: string, workflow?: string | null): G
     return workflowByName('hypershift-oz');
   }
   if (/fips/i.test(jobName)) return workflowByName('vpn-fips');
-  if (/z-za/i.test(jobName) || (/z-xz/i.test(jobName) && /nightly-5\.0/.test(jobName))) {
+  if (
+    /z-za/i.test(jobName) ||
+    (/z-x[zs]/i.test(jobName) && /nightly-5\.0/.test(jobName))
+  ) {
     return workflowByName('hetero-vpn');
   }
-  if (/z-xz|heterogeneous/i.test(jobName)) return workflowByName('hetero');
+  if (/z-xz|z-zx|heterogeneous/i.test(jobName)) return workflowByName('hetero');
   if (/external-ibmz-upi|libvirt-upi/i.test(jobName) && !/vpn/i.test(jobName)) {
     return workflowByName('upi');
   }

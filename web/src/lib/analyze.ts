@@ -537,6 +537,7 @@ export async function analyzeExecution(
     artBase,
     raw,
     counts,
+    prowLog,
   });
   const configLinks = buildConfigLinks(jobName, meta);
 
@@ -624,6 +625,12 @@ export async function analyzeExecution(
     } else {
       progressSummary = `Failed at ${firstFailed}.`;
     }
+  } else if (result === 'FAILED' && !firstFailed) {
+    progressSummary = /Failed to acquire resource|failed to acquire lease|resources not found/i.test(
+      prowLog || '',
+    )
+      ? 'Failed before steps: Boskos lease could not be acquired (quota exhausted or resources not found).'
+      : diagnosis.summary || 'Failed with no multi-stage step directories — see CI Operator Log.';
   } else if (result === 'PASSED') {
     progressSummary = 'All observed steps passed; job finished successfully.';
   }

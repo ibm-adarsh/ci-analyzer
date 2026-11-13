@@ -22,6 +22,8 @@ export function buildDiagnosis(input: {
   artBase: string;
   raw: string;
   counts: Record<string, number>;
+  /** Root ci-operator / prow build-log — used when no step dirs exist. */
+  prowLog?: string | null;
 }): Diagnosis {
   const d: Diagnosis = {
     summary: '',
@@ -42,6 +44,37 @@ export function buildDiagnosis(input: {
 
   const ref = input.firstFailed;
   if (!ref) {
+    const log = input.prowLog || '';
+    const leaseFail =
+      /Failed to acquire resource|failed to acquire lease|resources not found|current capacity:\s*0 free/i.test(
+        log,
+      );
+    if (leaseFail) {
+      const cap = log.match(/current capacity:\s*([^\n]+)/i)?.[1]?.trim();
+      const slice = log.match(/lease for "([^"]+)"/i)?.[1]
+        || log.match(/Acquiring leases for test[^:]*:\s*\[([^\]]+)\]/i)?.[1];
+      d.summary =
+        'Job failed before multi-stage steps — Boskos could not acquire a libvirt lease.';
+      d.confidence = 'high';
+      d.facts.push('No step directories under artifacts/ (failure happened during lease / graph setup).');
+      if (slice) d.facts.push(`Lease / quota slice: ${slice}`);
+      if (cap) d.facts.push(`Capacity at failure: ${cap}`);
+      d.hypotheses.push({
+        tag: 'lease',
+        text: 'Quota exhausted or Boskos resources not found for this cluster profile. Retry later or free a stuck lease on the LPAR pool.',
+      });
+      d.nextSteps.push({ label: 'Inspect CI Operator Log', tab: 'prowlog' });
+      d.nextSteps.push({ label: 'Browse artifacts', tab: 'artifacts' });
+      const jobBase = input.artBase.replace(/\/artifacts(?:\/.*)?$/, '');
+      d.evidence.push({
+        label: 'build-log.txt (root)',
+        url: `${jobBase}/build-log.txt`,
+        kind: 'log',
+        primary: true,
+        desc: 'ci-operator root log with lease acquire error',
+      });
+      return d;
+    }
     d.summary = 'Job marked failed, but no failed step directory was found under artifacts/.';
     d.confidence = 'low';
     d.facts.push(`Overall result: ${input.result}`);

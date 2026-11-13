@@ -33,12 +33,15 @@ export function parseJobMeta(jobName: string): JobMeta {
   let workerArch: string | null = null;
   let arch = /p-p|ppc64le/.test(jobName) ? 'ppc64le' : 's390x';
 
+  // Sippy/job names use both multi-z-xz and multi-z-zx for s390x CP + amd64 workers.
+  const heteroZx = /z-xz|z-zx/.test(jobName);
+
   if (/z-za/.test(jobName)) {
     topologyKind = 'heterogeneous';
     topology = 'IBM Z heterogeneous (z-za) — s390x CP + arm64 workers';
     topologyShort = 'Heterogeneous (z-za)';
     workerArch = 'arm64';
-  } else if (/z-xz/.test(jobName)) {
+  } else if (heteroZx) {
     topologyKind = 'heterogeneous';
     topology = 'IBM Z heterogeneous (z-xz) — s390x CP + amd64 workers';
     topologyShort = 'Heterogeneous (z-xz)';
@@ -56,6 +59,10 @@ export function parseJobMeta(jobName: string): JobMeta {
     topologyKind = 'homogeneous';
     topology = 'IBM Z external platform';
     topologyShort = 'External (ibmz)';
+  } else if (/agent-ibmz|ibmz-sno|(?:^|-)sno(?:-|$)/i.test(jobName)) {
+    topologyKind = 'homogeneous';
+    topology = 'IBM Z agent SNO / compact';
+    topologyShort = 'Agent SNO (ibmz)';
   } else if (/remote-libvirt-s390x|(?:^|-)libvirt-s390x(?:-|$)/.test(jobName)) {
     topologyKind = 'single-arch';
     topology = 'IBM Z single-arch (s390x payload)';
@@ -70,9 +77,9 @@ export function parseJobMeta(jobName: string): JobMeta {
   } else if (isLibvirt) {
     if (/ppc64le|p-p/.test(jobName)) profile = 'libvirt-ppc64le-s2s';
     else if (/z-za/.test(jobName)) profile = 'libvirt-s390x-vpn-arm64';
-    else if (/z-xz/.test(jobName) && /nightly-5\.0/.test(jobName))
+    else if (heteroZx && /nightly-5\.0/.test(jobName))
       profile = 'libvirt-s390x-vpn-amd64';
-    else if (/z-xz|heterogeneous/.test(jobName)) profile = 'libvirt-s390x-amd64';
+    else if (heteroZx || /heterogeneous/.test(jobName)) profile = 'libvirt-s390x-amd64';
     else if (/libvirt-s390x-vpn-arm64|remote-libvirt.*arm64|vpn-arm64/.test(jobName))
       profile = 'libvirt-s390x-vpn-arm64';
   }
@@ -81,8 +88,9 @@ export function parseJobMeta(jobName: string): JobMeta {
     isLibvirt || isHypershift ? inferWorkflowName(jobName, profile) : null;
 
   let archClass: ArchClass = 'unknown';
-  if (/z-za|z-xz/.test(jobName)) archClass = 'multi-arch-heterogeneous';
-  else if (/z-z/.test(jobName)) archClass = 'multi-arch-homogeneous';
+  if (/z-za/.test(jobName) || heteroZx) archClass = 'multi-arch-heterogeneous';
+  else if (/z-z/.test(jobName) || /agent-ibmz|ibmz-sno/i.test(jobName))
+    archClass = 'multi-arch-homogeneous';
   else if (/remote-libvirt-s390x|(?:^|-)libvirt-s390x$/.test(jobName))
     archClass = 'single-arch-s390x';
   else if (/s390x/.test(jobName)) archClass = 's390x';
@@ -123,7 +131,7 @@ export function classifyArch(jobName: string): ArchClass {
 }
 
 export function isIbmZJob(jobName: string): boolean {
-  return /z-z|z-za|z-xz|s390x|libvirt-s390x/.test(jobName);
+  return /z-z|z-za|z-xz|z-zx|s390x|libvirt-s390x|agent-ibmz|ibmz-sno/.test(jobName);
 }
 
 /** Enrich profile from ci-operator build-log when labels are missing. */
@@ -180,7 +188,7 @@ export function enrichMetaFromProwjob(meta: JobMeta, prowjob: Record<string, unk
   if (refs?.base_ref) meta.refsBranch = meta.refsBranch || refs.base_ref;
 
   const job = spec?.job || '';
-  if (/z-za|z-xz/.test(job)) meta.archClass = 'multi-arch-heterogeneous';
+  if (/z-za|z-xz|z-zx/.test(job)) meta.archClass = 'multi-arch-heterogeneous';
   else if (/z-z/.test(job)) meta.archClass = 'multi-arch-homogeneous';
   else if (/remote-libvirt-s390x|(?:^|-)libvirt-s390x$/.test(job))
     meta.archClass = 'single-arch-s390x';

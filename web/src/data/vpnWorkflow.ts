@@ -292,21 +292,24 @@ export function inferWorkflowName(
     return 'openshift-e2e-libvirt-heterogeneous-vpn';
   }
 
-  if (p === 'libvirt-s390x-amd64' || (/z-xz/.test(jobName) && !p.includes('vpn'))) {
-    // Classical UPI hetero (4.22/4.23/5.1 z-xz). 5.0 z-xz uses vpn-amd64 above.
-    if (p.includes('vpn-amd64') || (p.includes('vpn') && /z-xz/.test(jobName))) {
+  // Job names use multi-z-xz and multi-z-zx for the same s390x+amd64 topology.
+  const heteroZx = /z-xz|z-zx/.test(jobName);
+
+  if (p === 'libvirt-s390x-amd64' || (heteroZx && !p.includes('vpn'))) {
+    // Classical UPI hetero (4.22/4.23/5.1 z-xz/z-zx). 5.0 uses vpn-amd64 above.
+    if (p.includes('vpn-amd64') || (p.includes('vpn') && heteroZx)) {
       return 'openshift-e2e-libvirt-heterogeneous-vpn';
     }
-    if (/z-xz/.test(jobName) && /nightly-5\.0/.test(jobName)) {
+    if (heteroZx && /nightly-5\.0/.test(jobName)) {
       return 'openshift-e2e-libvirt-heterogeneous-vpn';
     }
-    if (p === 'libvirt-s390x-amd64' || /z-xz/.test(jobName)) {
+    if (p === 'libvirt-s390x-amd64' || heteroZx) {
       return 'openshift-e2e-libvirt-upi-heterogeneous';
     }
   }
 
-  if (/heterogeneous|z-za|z-xz/.test(jobName)) {
-    if (/z-za/.test(jobName) || /nightly-5\.0.*z-xz/.test(jobName)) {
+  if (/heterogeneous|z-za|z-xz|z-zx/.test(jobName)) {
+    if (/z-za/.test(jobName) || /nightly-5\.0.*z-x[zs]/.test(jobName)) {
       return 'openshift-e2e-libvirt-heterogeneous-vpn';
     }
     return 'openshift-e2e-libvirt-upi-heterogeneous';
