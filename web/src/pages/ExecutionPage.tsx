@@ -33,6 +33,32 @@ function workflowStepKey(name: string | null | undefined): string | null {
   return HETERO_ALIASES[name] || name;
 }
 
+/** Compact start time: `dd/mm/yy HH:mm UTC HH:mm IST`. */
+function fmtStartUtcIst(d: Date): string {
+  const parts = (timeZone: string) => {
+    const f = new Intl.DateTimeFormat('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone,
+    });
+    const bag: Record<string, string> = {};
+    for (const p of f.formatToParts(d)) {
+      if (p.type !== 'literal') bag[p.type] = p.value;
+    }
+    return {
+      date: `${bag.day}/${bag.month}/${bag.year}`,
+      time: `${bag.hour}:${bag.minute}`,
+    };
+  };
+  const utc = parts('UTC');
+  const ist = parts('Asia/Kolkata');
+  return `${utc.date} ${utc.time} UTC ${ist.time} IST`;
+}
+
 const PHASE_BLURB: Record<
   WorkflowPhase,
   { title: string; blurb: string }
@@ -195,9 +221,9 @@ export function ExecutionPage() {
   }
 
   const tone = a.result === 'PASSED' ? 'pass' : a.result === 'FAILED' ? 'fail' : 'run';
-  const start = a.started?.timestamp
-    ? new Date(a.started.timestamp * 1000).toUTCString()
-    : '—';
+  const startedAt = a.started?.timestamp ? new Date(a.started.timestamp * 1000) : null;
+  const start = startedAt ? startedAt.toUTCString() : '—';
+  const startShort = startedAt ? fmtStartUtcIst(startedAt) : null;
   const dur =
     a.started?.timestamp && a.finished?.timestamp
       ? fmtDur(a.finished.timestamp - a.started.timestamp)
@@ -251,8 +277,15 @@ export function ExecutionPage() {
               <StatusBadge status={a.result} />
               <span className="dbg-build mono">{a.buildId}</span>
             </div>
-            <span className="dbg-total mono" title="Wall-clock duration">
-              {dur}
+            <span className="dbg-timing" aria-label="Job timing">
+              {startShort ? (
+                <span className="dbg-start mono" title={`Started ${start}`}>
+                  {startShort}
+                </span>
+              ) : null}
+              <span className="dbg-total mono" title="Wall-clock duration">
+                {dur}
+              </span>
             </span>
           </div>
           <h1 title={a.jobName}>{shortJob(a.jobName)}</h1>

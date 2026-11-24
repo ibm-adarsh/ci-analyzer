@@ -1505,6 +1505,17 @@ select {
   font-size: 0.78rem;
   color: var(--muted);
 }
+.dbg-timing {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.dbg-start {
+  font-size: 0.78rem;
+  color: var(--muted);
+  letter-spacing: -0.01em;
+}
 .dbg-total {
   font-family: var(--font-display);
   font-weight: 600;
